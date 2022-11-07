@@ -9,7 +9,7 @@
 #define PI 3.14159   // 円周率
 
 #define STARTUP_SOUND_MODE 1   // 起動音モード
-#define SPEAKER_DUTY 0.1   // 0.5 // スピーカーのデューティー比
+#define SPEAKER_DUTY 0.5   // 0.5 // スピーカーのデューティー比
 #define DISPLAY_UPDATE_RATE 0.05   // OLEDの更新時間
 
 #define MOTOR_FREQUENCY 30000   // モーターのPWM周波数
@@ -98,8 +98,6 @@ short yaw, set_yaw;
 
 // タイマー定義
 Timer display_timer;
-Timer serial_timer;
-Timer move_timer;
 Timer line_timer;
 Timer dt_timer;
 Timer line_brake_timer;
@@ -545,7 +543,6 @@ void line_move(uint8_t* line_true, int16_t* line_back_angle) {
             for (uint8_t count = 0; count < 8; count++) {
                   if (line_check[count] == 1) {
                         pre_line = count;   // 最後に反応したラインセンサの記憶
-                        break;
                   }
             }
 
@@ -573,6 +570,8 @@ void line_move(uint8_t* line_true, int16_t* line_back_angle) {
                         line_result_vector_x = 0;
                         line_result_vector_y = 0;
                   }
+            }
+            for (uint8_t count = 0; count < 8; count++) {
                   line_result_vector_x += line_check[count] * line_unit_vector_x[count];
                   line_result_vector_y += line_check[count] * line_unit_vector_y[count];
             }
