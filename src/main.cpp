@@ -86,7 +86,7 @@ void sound_run(uint16_t sound_scale, uint16_t sound_time);
 void startup_sound(uint8_t startup_sound_mode);
 void line_read(bool line_set, uint16_t line_threshpre);
 void voltage_monitoring(float* voltage_value);
-void line_move(uint8_t* line_true, int16_t* line_back_angle);
+void line_move(uint8_t* line_true, int16_t* line_move_angle, uint8_t* line_brake, int16_t ball_angle);
 void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, float voltage_value, bool* line_set, int16_t ball_angle, int16_t ball_distance, int16_t* move_speed, int16_t* line_move_speed, uint16_t* line_threshpre, float dt, float* ball_rc, uint8_t* ball_follow_depth);
 
 // グローバル変数定義（なるべく使わないように）
@@ -133,8 +133,8 @@ int main() {
 
       // メイン関数内の変数定義
       bool line_set = 0;
-      uint8_t line_true = 0;
-      int16_t line_back_angle = 0;
+      uint8_t line_true = 0, line_brake = 0;
+      int16_t line_move_angle = 0;
       uint16_t line_threshpre = 250;
 
       int16_t ball_angle = 0, ball_distance = 0;
@@ -147,8 +147,8 @@ int main() {
       int8_t mode = 0, display_mode = 0, select = 0, set_value = 0, set_mode = 0;
       bool pre_button_middle = 1, pre_button_right = 1, pre_button_left = 1;
 
-      uint8_t ball_follow_depth = 10;
-      int16_t move_speed = 40, line_move_speed = 60;
+      uint8_t ball_follow_depth = 25;
+      int16_t move_speed = 40, line_move_speed = 40;
 
       float dt = 0;
 
@@ -217,29 +217,24 @@ int main() {
                   if (mode == 0) {   // UI操作時
                         motor_move(0, 0, 2);
                   } else if (mode == 1) {   // モード１
-                        line_move(&line_true, &line_back_angle);
+                        line_move(&line_true, &line_move_angle, &line_brake, ball_angle);
 
-                        if (line_true != 0 && line_brake_timer.read() <= 0.05) {
-                              motor_move(0, 0, 1);
-                        } else if (line_true == 1 || line_true == 5) {   // 前ライン
-                              motor_move(line_back_angle <= -90 || line_back_angle >= 90 ? line_back_angle : line_back_angle - 180, line_move_speed, 0);
-                        } else if (line_true == 2 || line_true == 6) {   // 右ライン
-                              motor_move(line_back_angle <= 0 && line_back_angle >= -180 ? line_back_angle : line_back_angle - 180, line_move_speed, 0);
-                        } else if (line_true == 3 || line_true == 7) {   // 後ライン
-                              motor_move(line_back_angle >= -90 && line_back_angle <= 90 ? line_back_angle : line_back_angle - 180, line_move_speed, 0);
-                        } else if (line_true == 4 || line_true == 8) {   // 左ライン
-                              motor_move(line_back_angle >= 0 && line_back_angle <= 180 ? line_back_angle : line_back_angle - 180, line_move_speed, 0);
+                        if (line_true != 0) {
+                              if (line_brake_timer.read() <= 0.05) {
+                                    motor_move(0, 0, 1);
+                              } else {
+                                    motor_move(line_move_angle, line_move_speed, line_brake);
+                              }
                         } else {
                               if (abs(blue_angle) > 75) {   // コートの端
                                     motor_move(blue_angle > 0 ? -135 : 135, move_speed, 0);
                               } else if (ball_distance == 0) {   // ボールがない
-                                    motor_move(0, 0, 0);
+                                    motor_move(0, 0, 1);
                               } else {   // ボールがある時
-                                    motor_move(abs(ball_angle) > BALL_FOLLOW_RANGE ? ball_angle + (ball_angle > 0 ? 90 : -90) : ball_angle * ((90 + BALL_FOLLOW_RANGE) / BALL_FOLLOW_RANGE) * (((ball_distance - ball_follow_depth < 1 ? 1 : ball_distance) - ball_follow_depth) / float(100.000 - ball_follow_depth)), move_speed, 0);   // 回り込み
+                                    motor_move(abs(ball_angle) > BALL_FOLLOW_RANGE ? ball_angle + (ball_angle > 0 ? 90 : -90) : ball_angle * ((90 + BALL_FOLLOW_RANGE) / BALL_FOLLOW_RANGE) * (((ball_distance < ball_follow_depth ? ball_follow_depth : ball_distance) - ball_follow_depth) / float(100.000 - ball_follow_depth)), move_speed, 0);   // 回り込み
                               }
                         }
                   } else if (mode == 2) {   // モード２
-                        motor_move(ball_angle > 0 ? (line_check[0] == 1 || line_check[1] == 1 || line_check[4] == 1 || line_check[5] == 1 ? 30 : 110) : (line_check[0] == 1 || line_check[1] == 1 || line_check[4] == 1 || line_check[5] == 1 ? -30 : -110), ball_angle * ball_angle / 15 > move_speed ? move_speed : ball_angle * ball_angle / 10, 0);
                   } else if (mode == 3) {   // モード３
                   } else if (mode == 4) {   // モード４
                         motor_move(0, 0, 0);
@@ -529,14 +524,19 @@ void line_read(bool line_set, uint16_t line_threshpre) {   // ラインセンサ
       }
 }
 
-void line_move(uint8_t* line_true, int16_t* line_back_angle) {
-      static uint8_t pre_line = 0;
+void line_move(uint8_t* line_true, int16_t* line_move_angle, uint8_t* line_brake, int16_t ball_angle) {
+      uint8_t line_check_unit[4] = {0, 0, 0, 0};
+      static uint8_t pre_line = 0, line_true_x = 0, line_true_y = 0;
+      static int16_t line_back_angle = 0;
       float line_unit_vector_x[8] = {0, 0, 0.5, 1, 0, 0, -0.5, -1};
       float line_unit_vector_y[8] = {0.5, 1, 0, 0, -0.5, -1, 0, 0};
       static float line_result_vector_x = 0, line_result_vector_y = 0;
       static float pre_line_result_vector_x = 0, pre_line_result_vector_y = 0;
+      *line_brake = 0;
 
-      if (line_check[0] == 1 || line_check[1] == 1 || line_check[2] == 1 || line_check[3] == 1 || line_check[4] == 1 || line_check[5] == 1 || line_check[6] == 1 || line_check[7] == 1) {   // いずれかのラインセンサが反応している時
+      for (uint8_t count = 0; count < 4; count++) line_check_unit[count] = line_check[count * 2] == 1 || line_check[count * 2 + 1] == 1 ? 1 : 0;
+
+      if (line_check_unit[0] == 1 || line_check_unit[1] == 1 || line_check_unit[2] == 1 || line_check_unit[3] == 1) {   // いずれかのラインセンサが反応している時
             line_timer.start();
             line_timer.reset();
             if (*line_true == 0) line_brake_timer.start();
@@ -546,22 +546,51 @@ void line_move(uint8_t* line_true, int16_t* line_back_angle) {
                   }
             }
 
-            if ((line_check[0] == 1 || line_check[1] == 1) && ((*line_true == 3 && line_check[4] == 1) || *line_true == 0)) *line_true = 1;   // 前外ライン
+            if ((line_check_unit[0] == 1) && ((*line_true == 3 && line_check[4] == 1) || *line_true == 0)) *line_true = 1;   // 前外ライン
             if (line_check[5] == 1 && *line_true == 1) *line_true = 5;   // 前内ライン
-            if ((line_check[2] == 1 || line_check[3] == 1) && ((*line_true == 4 && line_check[6] == 1) || *line_true == 0)) *line_true = 2;   // 前外ライン
+            if ((line_check_unit[1] == 1) && ((*line_true == 4 && line_check[6] == 1) || *line_true == 0)) *line_true = 2;   // 前外ライン
             if (line_check[7] == 1 && *line_true == 2) *line_true = 6;   // 前内ライン
-            if ((line_check[4] == 1 || line_check[5] == 1) && ((*line_true == 1 && line_check[0] == 1) || *line_true == 0)) *line_true = 3;   // 前外ライン
+            if ((line_check_unit[2] == 1) && ((*line_true == 1 && line_check[0] == 1) || *line_true == 0)) *line_true = 3;   // 前外ライン
             if (line_check[1] == 1 && *line_true == 3) *line_true = 7;   // 前内ライン
-            if ((line_check[6] == 1 || line_check[7] == 1) && ((*line_true == 2 && line_check[2] == 1) || *line_true == 0)) *line_true = 4;   // 前外ライン
+            if ((line_check_unit[3] == 1) && ((*line_true == 2 && line_check[2] == 1) || *line_true == 0)) *line_true = 4;   // 前外ライン
             if (line_check[3] == 1 && *line_true == 4) *line_true = 8;   // 前内ライン
+            if ((line_check_unit[0] == 1) && ((line_true_y == 2 && line_check[4] == 1) || line_true_y == 0)) line_true_y = 1;   // 前外ライン
+            if (line_check[5] == 1 && line_true_y == 1) line_true_y = 3;   // 前内ライン
+            if ((line_check_unit[2] == 1) && ((line_true_y == 1 && line_check[0] == 1) || line_true_y == 0)) line_true_y = 2;   // 後外ライン
+            if (line_check[1] == 1 && line_true_y == 2) line_true_y = 4;   // 後内ライン
+            if ((line_check_unit[1] == 1) && ((line_true_x == 2 && line_check[6] == 1) || line_true_x == 0)) line_true_x = 1;   // 右外ライン
+            if (line_check[7] == 1 && line_true_x == 1) line_true_x = 3;   // 右内ライン
+            if ((line_check_unit[3] == 1) && ((line_true_x == 1 && line_check[2] == 1) || line_true_x == 0)) line_true_x = 2;   // 左外ライン
+            if (line_check[3] == 1 && line_true_x == 2) line_true_x = 4;   // 左内ライン
       }
 
-      if (line_timer.read() > 0.1 && (((*line_true == 1 || *line_true == 5) && pre_line != 4) || ((*line_true == 2 || *line_true == 6) && pre_line != 6) || ((*line_true == 3 || *line_true == 7) && pre_line != 0) || ((*line_true == 4 || *line_true == 8) && pre_line != 2))) {   // ライン処理から通常処理に戻る
-            *line_true = 0;
-            line_timer.stop();
-            line_timer.reset();
-            line_brake_timer.stop();
-            line_brake_timer.reset();
+      if (((*line_true == 1 || *line_true == 5) && pre_line != 4) || ((*line_true == 2 || *line_true == 6) && pre_line != 6) || ((*line_true == 3 || *line_true == 7) && pre_line != 0) || ((*line_true == 4 || *line_true == 8) && pre_line != 2)) {   // ライン処理から通常処理に戻る
+            if (line_timer.read() > 0.25) {
+                  if (line_timer.read() > 5) {
+                        *line_true = 0;
+                        line_timer.stop();
+                        line_timer.reset();
+                  }
+                  if ((*line_true == 1 || *line_true == 5) && (ball_angle > -45 && ball_angle < 45)) {
+                        *line_brake = 1;
+                  } else if ((*line_true == 3 || *line_true == 7) && (ball_angle < -90 || ball_angle > 90)) {
+                        *line_brake = 1;
+                  } else if ((*line_true == 2 || *line_true == 6) && (ball_angle < 90 && ball_angle > 30)) {
+                        *line_brake = 1;
+                  } else if ((*line_true == 4 || *line_true == 8) && (ball_angle > -90 && ball_angle < -30)) {
+                        *line_brake = 1;
+                  } else {
+                        *line_true = 0;
+                        line_timer.stop();
+                        line_timer.reset();
+                  }
+                  line_true_x = 0;
+                  line_true_y = 0;
+                  line_brake_timer.stop();
+                  line_brake_timer.reset();
+            } else {
+                  if (line_check_unit[0] == 0 && line_check_unit[1] == 0 && line_check_unit[2] == 0 && line_check_unit[3] == 0) *line_brake = 1;
+            }
       }
 
       if (*line_true != 0) {
@@ -575,10 +604,28 @@ void line_move(uint8_t* line_true, int16_t* line_back_angle) {
                   line_result_vector_x += line_check[count] * line_unit_vector_x[count];
                   line_result_vector_y += line_check[count] * line_unit_vector_y[count];
             }
-            if (pre_line_result_vector_x != line_result_vector_x || pre_line_result_vector_y != line_result_vector_y) *line_back_angle = atan2(line_result_vector_x, line_result_vector_y) / PI * 180.000 + 180.5;
+            if (pre_line_result_vector_x != line_result_vector_x || pre_line_result_vector_y != line_result_vector_y) line_back_angle = atan2(line_result_vector_x, line_result_vector_y) / PI * 180.000 + 180.5;
             pre_line_result_vector_x = line_result_vector_x;
             pre_line_result_vector_y = line_result_vector_y;
-            if (*line_back_angle > 180) *line_back_angle -= 360;
+            if (line_back_angle > 180) line_back_angle -= 360;
+      }
+
+      if ((line_true_y == 1 || line_true_y == 3) && (line_true_x == 1 || line_true_x == 3)) {   // 前右ライン
+            *line_move_angle = line_back_angle <= -45 || line_back_angle >= 135 ? line_back_angle : line_back_angle - 180;
+      } else if ((line_true_y == 1 || line_true_y == 3) && (line_true_x == 2 || line_true_x == 4)) {   // 前左ライン
+            *line_move_angle = line_back_angle <= -135 || line_back_angle >= 45 ? line_back_angle : line_back_angle - 180;
+      } else if ((line_true_y == 2 || line_true_y == 4) && (line_true_x == 1 || line_true_x == 3)) {   // 後右ライン
+            *line_move_angle = line_back_angle >= -135 && line_back_angle <= 45 ? line_back_angle : line_back_angle - 180;
+      } else if ((line_true_y == 2 || line_true_y == 4) && (line_true_x == 2 || line_true_x == 4)) {   // 後左ライン
+            *line_move_angle = line_back_angle >= -45 && line_back_angle <= 135 ? line_back_angle : line_back_angle - 180;
+      } else if (line_true_y == 1 || line_true_y == 3) {   // 前ライン
+            *line_move_angle = line_back_angle <= -90 || line_back_angle >= 90 ? line_back_angle : line_back_angle - 180;
+      } else if (line_true_y == 2 || line_true_y == 4) {   // 後ライン
+            *line_move_angle = line_back_angle >= -90 && line_back_angle <= 90 ? line_back_angle : line_back_angle - 180;
+      } else if (line_true_x == 1 || line_true_x == 3) {   // 右ライン
+            *line_move_angle = line_back_angle >= -180 && line_back_angle <= 0 ? line_back_angle : line_back_angle - 180;
+      } else if (line_true_x == 2 || line_true_x == 4) {   // 左ライン
+            *line_move_angle = line_back_angle >= 0 && line_back_angle <= 180 ? line_back_angle : line_back_angle - 180;
       }
 }
 
