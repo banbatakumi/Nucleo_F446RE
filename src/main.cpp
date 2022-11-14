@@ -4,12 +4,12 @@
 #include "Serial.h"
 #include "math.h"
 #include "mbed.h"
+#include "speaker.h"
 
 // 定義
 #define PI 3.14159   // 円周率
 
 #define STARTUP_SOUND_MODE 1   // 起動音モード
-#define SPEAKER_DUTY 0.01   // 0.5 // スピーカーのデューティー比
 #define DISPLAY_UPDATE_RATE 0.05   // OLEDの更新時間
 
 #define MOTOR_FREQUENCY 25000   // モーターのPWM周波数
@@ -37,6 +37,8 @@
 // I2Cの設定
 I2C i2c(PB_9, PB_8);
 Adafruit_SSD1306_I2c oled(i2c, D9, SSD_I2C_ADDRESS, 64, 128);
+
+speaker sound(PC_8);
 
 // ピン割当
 Serial arduino_sub(PA_0, PA_1);   // TX, RX
@@ -68,8 +70,6 @@ AnalogIn line_left_2(PA_6);
 
 AnalogIn voltage(PA_5);
 
-PwmOut speaker(PC_8);
-
 PwmOut motor_1_2(PA_10);
 PwmOut motor_1_1(PB_3);
 PwmOut motor_2_2(PB_5);
@@ -82,8 +82,6 @@ PwmOut motor_4_1(PA_9);
 // 関数定義
 void motor_move(int16_t move_angle, int16_t move_speed, uint8_t brake);
 void ir_read(int16_t* ball_angle, int16_t* ball_distance, float ball_rc);
-void sound_run(uint16_t sound_scale, uint16_t sound_time);
-void startup_sound(uint8_t startup_sound_mode);
 void line_read(bool line_set, uint16_t line_threshpre);
 void voltage_monitoring(float* voltage_value);
 void line_move(uint8_t* line_true, int16_t* line_move_angle, uint8_t* line_brake, int16_t ball_angle);
@@ -129,7 +127,7 @@ int main() {
       oled.setTextCursor(0, 0);
       oled.printf("setting now");
       oled.display();
-      startup_sound(STARTUP_SOUND_MODE);
+      sound.startup_sound(1);
 
       // メイン関数内の変数定義
       bool line_set = 0;
@@ -192,9 +190,9 @@ int main() {
                         oled.printf("battery is row\n");
                         oled.printf("please change battery");
                         oled.display();
-                        sound_run(400, 50000);
+                        sound.run(400, 50);
                         wait_us(50000);
-                        sound_run(400, 50000);
+                        sound.run(400, 50);
                         wait_us(50000);
                         battery_warning = 1;
                   }
@@ -205,7 +203,7 @@ int main() {
                   if (button_middle == 0) {
                         voltage_drop_value = 0.00;
                         voltage_stop_count = 0;
-                        sound_run(380, 50000);
+                        sound.run(380, 50);
                   }
             } else {   // 通常時
                   line_read(line_set, line_threshpre);   // ラインセンサの値取得
@@ -272,9 +270,9 @@ int main() {
                   if (button_left == 0 && pre_button_left == 1 && set_mode == 2) set_value--;
                   if (button_left == 0 && set_mode == 2 && button_middle == 0) set_value--;
 
-                  if (set_mode == 2 && button_middle == 0 && (button_right == 0 || button_left == 0)) sound_run(325, 50000);
-                  if ((button_right == 0 || button_left == 0) && (select == 0 || set_mode != 0) && (pre_button_right == 1 && pre_button_left == 1)) sound_run(350, 25000);
-                  if (button_middle == 0 && pre_button_middle == 1 && button_right == 1 && button_left == 1) sound_run(375, 50000);
+                  if (set_mode == 2 && button_middle == 0 && (button_right == 0 || button_left == 0)) sound.run(325, 50);
+                  if ((button_right == 0 || button_left == 0) && (select == 0 || set_mode != 0) && (pre_button_right == 1 && pre_button_left == 1)) sound.run(350, 25);
+                  if (button_middle == 0 && pre_button_middle == 1 && button_right == 1 && button_left == 1) sound.run(375, 50);
 
                   pre_button_middle = button_middle;
                   pre_button_right = button_right;
@@ -594,13 +592,7 @@ void line_move(uint8_t* line_true, int16_t* line_move_angle, uint8_t* line_brake
       }
 }
 
-void sound_run(uint16_t sound_scale, uint16_t sound_time) {
-      speaker = SPEAKER_DUTY;
-      speaker.period_us(sound_scale);
-      if (sound_time != 0) wait_us(sound_time);
-      speaker = 0;
-
-      // モーターのPWMへ変更
+void motor_move(int16_t move_angle, int16_t move_speed, uint8_t brake) {
       motor_1_1.period_us(MOTOR_FREQUENCY);
       motor_1_2.period_us(MOTOR_FREQUENCY);
       motor_2_1.period_us(MOTOR_FREQUENCY);
@@ -609,9 +601,6 @@ void sound_run(uint16_t sound_scale, uint16_t sound_time) {
       motor_3_2.period_us(MOTOR_FREQUENCY);
       motor_4_1.period_us(MOTOR_FREQUENCY);
       motor_4_2.period_us(MOTOR_FREQUENCY);
-}
-
-void motor_move(int16_t move_angle, int16_t move_speed, uint8_t brake) {
       if (brake == 1) {   // ブレーキ
             motor_1_1 = 1;
             motor_1_2 = 1;
@@ -675,35 +664,4 @@ void motor_move(int16_t move_angle, int16_t move_speed, uint8_t brake) {
              oled.printf("%d\n", motor[3]);
              oled.display();*/
       }
-}
-
-void startup_sound(uint8_t startup_sound_mode) {
-      speaker = SPEAKER_DUTY;
-      if (startup_sound_mode == 1) {   // モード１の起動音
-            speaker.period_us(400);
-            wait_us(100000);
-            speaker = 0;
-            wait_us(100000);
-            speaker = SPEAKER_DUTY;
-            speaker.period_us(350);
-            wait_us(100000);
-            speaker.period_us(500);
-            wait_us(100000);
-            speaker.period_us(450);
-            wait_us(100000);
-      } else if (startup_sound_mode == 2) {   // モード２の起動音
-            speaker.period_us(400);
-            wait_us(100000);
-            speaker = 0;
-            wait_us(100000);
-            speaker = SPEAKER_DUTY;
-            speaker.period_us(350);
-            wait_us(50000);
-            speaker = 0;
-            wait_us(50000);
-            speaker = SPEAKER_DUTY;
-            speaker.period_us(350);
-            wait_us(50000);
-      }
-      speaker = 0;
 }
