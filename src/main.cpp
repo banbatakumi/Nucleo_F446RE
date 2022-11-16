@@ -2,14 +2,16 @@
 
 #include "Adafruit_SSD1306.h"
 #include "Serial.h"
+#include "ball.h"
 #include "math.h"
 #include "mbed.h"
+#include "motor.h"
 #include "speaker.h"
+#include "voltage.h"
 
 // 定義
 #define PI 3.14159   // 円周率
 
-#define STARTUP_SOUND_MODE 1   // 起動音モード
 #define DISPLAY_UPDATE_RATE 0.05   // OLEDの更新時間
 
 #define MOTOR_FREQUENCY 25000   // モーターのPWM周波数
@@ -38,7 +40,11 @@
 I2C i2c(PB_9, PB_8);
 Adafruit_SSD1306_I2c oled(i2c, D9, SSD_I2C_ADDRESS, 64, 128);
 
-speaker sound(PC_8);
+speaker _speaker(PC_9);
+
+ball _ball(PB_12, PB_13, PB_14, PC_4, PA_15, PC_11, PD_2, PC_8);
+
+voltage _voltage(PA_5);
 
 // ピン割当
 Serial arduino_sub(PA_0, PA_1);   // TX, RX
@@ -47,15 +53,6 @@ Serial arduino_imu(PA_2, PA_3);   // TX, RX
 DigitalIn button_middle(PC_12);
 DigitalIn button_left(PC_10);
 DigitalIn button_right(PC_13);
-
-DigitalIn ir_0(PB_12);
-DigitalIn ir_1(PB_13);
-DigitalIn ir_2(PB_14);
-DigitalIn ir_3(PC_4);
-DigitalIn ir_4(PA_15);
-DigitalIn ir_5(PC_11);
-DigitalIn ir_6(PD_2);
-DigitalIn ir_7(PC_9);
 
 DigitalOut line_led(PB_2);
 
@@ -68,8 +65,6 @@ AnalogIn line_back_2(PC_0);
 AnalogIn line_left_1(PA_7);
 AnalogIn line_left_2(PA_6);
 
-AnalogIn voltage(PA_5);
-
 PwmOut motor_1_2(PA_10);
 PwmOut motor_1_1(PB_3);
 PwmOut motor_2_2(PB_5);
@@ -81,9 +76,7 @@ PwmOut motor_4_1(PA_9);
 
 // 関数定義
 void motor_move(int16_t move_angle, int16_t move_speed, uint8_t brake);
-void ir_read(int16_t* ball_angle, int16_t* ball_distance, float ball_rc);
 void line_read(bool line_set, uint16_t line_threshpre);
-void voltage_monitoring(float* voltage_value);
 void line_move(uint8_t* line_true, int16_t* line_move_angle, uint8_t* line_brake, int16_t ball_angle);
 void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, float voltage_value, bool* line_set, int16_t ball_angle, int16_t ball_distance, int16_t* move_speed, int16_t* line_move_speed, uint16_t* line_threshpre, float dt, float* ball_rc, uint8_t* ball_follow_depth);
 
@@ -127,7 +120,7 @@ int main() {
       oled.setTextCursor(0, 0);
       oled.printf("setting now");
       oled.display();
-      sound.startup_sound(1);
+      _speaker.startup_sound(2);
 
       // メイン関数内の変数定義
       bool line_set = 0;
@@ -179,8 +172,7 @@ int main() {
       dt_timer.start();
 
       while (true) {
-            voltage_monitoring(&voltage_value);   // 電圧の監視
-
+            voltage_value = _voltage.get();
             if (voltage_stop_count > VOLTAGE_STOP_COUNT_NUMBER_OF_TIMES) {   // 電圧低下による停止
                   motor_move(0, 0, 2);
                   line_led = 0;
@@ -190,9 +182,9 @@ int main() {
                         oled.printf("battery is row\n");
                         oled.printf("please change battery");
                         oled.display();
-                        sound.run(400, 50);
+                        _speaker.run(400, 50);
                         wait_us(50000);
-                        sound.run(400, 50);
+                        _speaker.run(400, 50);
                         wait_us(50000);
                         battery_warning = 1;
                   }
@@ -203,11 +195,11 @@ int main() {
                   if (button_middle == 0) {
                         voltage_drop_value = 0.00;
                         voltage_stop_count = 0;
-                        sound.run(380, 50);
+                        _speaker.run(380, 50);
                   }
             } else {   // 通常時
                   line_read(line_set, line_threshpre);   // ラインセンサの値取得
-                  ir_read(&ball_angle, &ball_distance, ball_rc);   // IRセンサの値の取得
+                  _ball.get(&ball_angle, &ball_distance, ball_rc);   // IRセンサの値の取得
 
                   if (voltage_value < voltage_drop_value) voltage_stop_count++;
                   if (voltage_value > voltage_drop_value && voltage_stop_count > 0) voltage_stop_count--;
@@ -245,6 +237,15 @@ int main() {
                               ui(&select, display_mode, &set_mode, &set_value, &mode, voltage_value, &line_set, ball_angle, ball_distance, &move_speed, &line_move_speed, &line_threshpre, dt, &ball_rc, &ball_follow_depth);   // DISPLAY_UPDATE_RATEごとにOLEDを更新する
                               display_timer.reset();
                         }
+
+                        motor_1_1.period_us(MOTOR_FREQUENCY);
+                        motor_1_2.period_us(MOTOR_FREQUENCY);
+                        motor_2_1.period_us(MOTOR_FREQUENCY);
+                        motor_2_2.period_us(MOTOR_FREQUENCY);
+                        motor_3_1.period_us(MOTOR_FREQUENCY);
+                        motor_3_2.period_us(MOTOR_FREQUENCY);
+                        motor_4_1.period_us(MOTOR_FREQUENCY);
+                        motor_4_2.period_us(MOTOR_FREQUENCY);
                   } else {   // 動いている時
                         display_timer.stop();
                         dt_timer.stop();
@@ -270,20 +271,15 @@ int main() {
                   if (button_left == 0 && pre_button_left == 1 && set_mode == 2) set_value--;
                   if (button_left == 0 && set_mode == 2 && button_middle == 0) set_value--;
 
-                  if (set_mode == 2 && button_middle == 0 && (button_right == 0 || button_left == 0)) sound.run(325, 50);
-                  if ((button_right == 0 || button_left == 0) && (select == 0 || set_mode != 0) && (pre_button_right == 1 && pre_button_left == 1)) sound.run(350, 25);
-                  if (button_middle == 0 && pre_button_middle == 1 && button_right == 1 && button_left == 1) sound.run(375, 50);
+                  if (set_mode == 2 && button_middle == 0 && (button_right == 0 || button_left == 0)) _speaker.run(325, 50);
+                  if ((button_right == 0 || button_left == 0) && (select == 0 || set_mode != 0) && (pre_button_right == 1 && pre_button_left == 1)) _speaker.run(350, 25);
+                  if (button_middle == 0 && pre_button_middle == 1 && button_right == 1 && button_left == 1) _speaker.run(375, 50);
 
                   pre_button_middle = button_middle;
                   pre_button_right = button_right;
                   pre_button_left = button_left;
             }
       }
-}
-
-void voltage_monitoring(float* voltage_value) {   // 電圧の監視
-      float pre_voltage_value = *voltage_value;
-      *voltage_value = (voltage.read_u16() * 5.0 / 1023.0 / 23.0) * (1 - VOLTAGE_RC) + pre_voltage_value * VOLTAGE_RC;   // 電圧のRCフィルタリング
 }
 
 void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, float voltage_value, bool* line_set, int16_t ball_angle, int16_t ball_distance, int16_t* move_speed, int16_t* line_move_speed, uint16_t* line_threshpre, float dt, float* ball_rc, uint8_t* ball_follow_depth) {   // UI
@@ -444,43 +440,6 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
       oled.display();
 }
 
-void ir_read(int16_t* ball_angle, int16_t* ball_distance, float ball_rc) {   // IRセンサ値の取得
-      uint32_t ir_value[IR_NUM] = {0, 0, 0, 0, 0, 0, 0, 0};
-      static uint16_t pre_ir_value[IR_NUM] = {0, 0, 0, 0, 0, 0, 0, 0};
-      static uint16_t sample_ir_value[IR_SAMPLE_NUMBER][IR_NUM];
-      int32_t result_vector_x = 0, result_vector_y = 0;
-      float unit_vector_x[IR_NUM] = {0, 0.707, 1, 0.707, 0, -0.707, -1, -0.707};
-      float unit_vector_y[IR_NUM] = {1, 0.707, 0, -0.707, -1, -0.707, 0, 0.707};
-
-      for (uint8_t count = 0; count < IR_NUM; count++) ir_value[count] = 0;
-      for (uint16_t count = 0; count < IR_READ_NUMBER_OF_TIME; count++) {
-            ir_value[0] += ir_0;
-            ir_value[1] += ir_1;
-            ir_value[2] += ir_2;
-            ir_value[3] += ir_3;
-            ir_value[4] += ir_4;
-            ir_value[5] += ir_5;
-            ir_value[6] += ir_6;
-            ir_value[7] += ir_7;
-      }
-
-      for (uint8_t count = 0; count < IR_NUM; count++) {
-            for (uint8_t i = IR_SAMPLE_NUMBER - 1; i > 0; i--) sample_ir_value[i][count] = sample_ir_value[i - 1][count];
-            sample_ir_value[0][count] = ir_value[count];
-            ir_value[count] = 0;
-            for (uint8_t i = 0; i < IR_SAMPLE_NUMBER; i++) ir_value[count] += sample_ir_value[i][count];
-            ir_value[count] = (IR_READ_NUMBER_OF_TIME * IR_SAMPLE_NUMBER - ir_value[count]) * (100.000 / (IR_READ_NUMBER_OF_TIME * IR_SAMPLE_NUMBER));
-            ir_value[count] = ir_value[count] * (1 - ball_rc) + pre_ir_value[count] * ball_rc;
-            pre_ir_value[count] = ir_value[count];
-            result_vector_x += ir_value[count] * unit_vector_x[count];
-            result_vector_y += ir_value[count] * unit_vector_y[count];
-      }
-
-      *ball_angle = atan2(result_vector_x, result_vector_y) / PI * 180.000 + 0.5;
-      *ball_distance = sqrt(pow(result_vector_x, 2) + pow(result_vector_y, 2)) + 0.5;
-      if (*ball_distance > 100) *ball_distance = 100;
-}
-
 void line_read(bool line_set, uint16_t line_threshpre) {   // ラインセンサ値の取得
       uint16_t line_value[8] = {0, 0, 0, 0, 0, 0, 0, 0};
       static uint16_t pre_line_value[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -593,14 +552,6 @@ void line_move(uint8_t* line_true, int16_t* line_move_angle, uint8_t* line_brake
 }
 
 void motor_move(int16_t move_angle, int16_t move_speed, uint8_t brake) {
-      motor_1_1.period_us(MOTOR_FREQUENCY);
-      motor_1_2.period_us(MOTOR_FREQUENCY);
-      motor_2_1.period_us(MOTOR_FREQUENCY);
-      motor_2_2.period_us(MOTOR_FREQUENCY);
-      motor_3_1.period_us(MOTOR_FREQUENCY);
-      motor_3_2.period_us(MOTOR_FREQUENCY);
-      motor_4_1.period_us(MOTOR_FREQUENCY);
-      motor_4_2.period_us(MOTOR_FREQUENCY);
       if (brake == 1) {   // ブレーキ
             motor_1_1 = 1;
             motor_1_2 = 1;
