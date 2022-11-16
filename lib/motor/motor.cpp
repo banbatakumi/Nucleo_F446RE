@@ -22,7 +22,7 @@ void motor::run(int16_t move_angle, int16_t move_speed) {
       for (uint8_t count = 0; count < 4 && move_speed > 0; count++) power[count] *= move_speed / maximum_power;
 
       // PD姿勢制御
-      //p = 0 - yaw;   // 比例
+      p = 0 - yaw;   // 比例
       d = p - pre_p;   // 微分
       pre_p = p;
       pd = p * KP + d * KD;
@@ -44,7 +44,7 @@ void motor::run(int16_t move_angle, int16_t move_speed) {
       motor_4_2 = abs(power[3]) < MIN_BRAKE ? 1 : (power[3] < 0 ? power[3] * -0.01 : 0);
 }
 
-void motor::reset_pwm() {
+void motor::set_pwm() {
       motor_1_1.period_us(MOTOR_FREQUENCY);
       motor_1_2.period_us(MOTOR_FREQUENCY);
       motor_2_1.period_us(MOTOR_FREQUENCY);
@@ -64,4 +64,15 @@ void motor::brake() {
       motor_3_2 = 1;
       motor_4_1 = 1;
       motor_4_2 = 1;
+}
+
+void motor::free() {
+      motor_1_1 = 0;
+      motor_1_2 = 0;
+      motor_2_1 = 0;
+      motor_2_2 = 0;
+      motor_3_1 = 0;
+      motor_3_2 = 0;
+      motor_4_1 = 0;
+      motor_4_2 = 0;
 }

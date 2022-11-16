@@ -46,6 +46,8 @@ ball _ball(PB_12, PB_13, PB_14, PC_4, PA_15, PC_11, PD_2, PC_8);
 
 voltage _voltage(PA_5);
 
+motor _motor(PB_3, PA_10, PA_11, PB_5, PB_10, PA_8, PA_9, PB_6);
+
 // ピン割当
 Serial arduino_sub(PA_0, PA_1);   // TX, RX
 Serial arduino_imu(PA_2, PA_3);   // TX, RX
@@ -64,7 +66,7 @@ AnalogIn line_back_1(PA_4);
 AnalogIn line_back_2(PC_0);
 AnalogIn line_left_1(PA_7);
 AnalogIn line_left_2(PA_6);
-
+/*
 PwmOut motor_1_2(PA_10);
 PwmOut motor_1_1(PB_3);
 PwmOut motor_2_2(PB_5);
@@ -73,9 +75,10 @@ PwmOut motor_3_2(PA_8);
 PwmOut motor_3_1(PB_10);
 PwmOut motor_4_2(PB_6);
 PwmOut motor_4_1(PA_9);
+*/
 
 // 関数定義
-void motor_move(int16_t move_angle, int16_t move_speed, uint8_t brake);
+// void _motor(int16_t move_angle, int16_t move_speed, uint8_t brake);
 void line_read(bool line_set, uint16_t line_threshpre);
 void line_move(uint8_t* line_true, int16_t* line_move_angle, uint8_t* line_brake, int16_t ball_angle);
 void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, float voltage_value, bool* line_set, int16_t ball_angle, int16_t ball_distance, int16_t* move_speed, int16_t* line_move_speed, uint16_t* line_threshpre, float dt, float* ball_rc, uint8_t* ball_follow_depth);
@@ -154,14 +157,7 @@ int main() {
       line_led = 0;
 
       // モーターPWM周波数の設定
-      motor_1_1.period_us(MOTOR_FREQUENCY);
-      motor_1_2.period_us(MOTOR_FREQUENCY);
-      motor_2_1.period_us(MOTOR_FREQUENCY);
-      motor_2_2.period_us(MOTOR_FREQUENCY);
-      motor_3_1.period_us(MOTOR_FREQUENCY);
-      motor_3_2.period_us(MOTOR_FREQUENCY);
-      motor_4_1.period_us(MOTOR_FREQUENCY);
-      motor_4_2.period_us(MOTOR_FREQUENCY);
+      _motor.set_pwm();
 
       // arduinoのシリアル割り込み設定
       arduino_imu.attach(imu_getc, Serial::RxIrq);
@@ -174,7 +170,7 @@ int main() {
       while (true) {
             voltage_value = _voltage.get();
             if (voltage_stop_count > VOLTAGE_STOP_COUNT_NUMBER_OF_TIMES) {   // 電圧低下による停止
-                  motor_move(0, 0, 2);
+                  _motor.free();
                   line_led = 0;
                   if (battery_warning == 0) {
                         oled.clearDisplay();
@@ -200,30 +196,34 @@ int main() {
             } else {   // 通常時
                   line_read(line_set, line_threshpre);   // ラインセンサの値取得
                   _ball.get(&ball_angle, &ball_distance, ball_rc);   // IRセンサの値の取得
+                  _motor.yaw = yaw;
 
                   if (voltage_value < voltage_drop_value) voltage_stop_count++;
                   if (voltage_value > voltage_drop_value && voltage_stop_count > 0) voltage_stop_count--;
 
                   if (mode == 0) {   // UI操作時
-                        motor_move(0, 0, 2);
+                        _motor.free();
                   } else if (mode == 1) {   // モード１
                         line_move(&line_true, &line_move_angle, &line_brake, ball_angle);
 
                         if (line_true != 0) {
-                              motor_move(line_move_angle, line_move_speed, line_brake);
+                              if (line_brake == 1) {
+                                    _motor.brake();
+                              } else {
+                                    _motor.run(line_move_angle, line_move_speed);
+                              }
                         } else {
                               if (abs(blue_angle) > 75) {   // コートの端
-                                    motor_move(blue_angle > 0 ? -135 : 135, move_speed, 0);
+                                    _motor.run(blue_angle > 0 ? -135 : 135, move_speed);
                               } else if (ball_distance == 0) {   // ボールがない
-                                    motor_move(0, 0, 0);
+                                    _motor.run(0, 0);
                               } else {   // ボールがある時
-                                    motor_move(abs(ball_angle) > BALL_FOLLOW_RANGE ? ball_angle + (ball_angle > 0 ? 90 : -90) : ball_angle * ((90 + BALL_FOLLOW_RANGE) / BALL_FOLLOW_RANGE) * (((ball_distance < ball_follow_depth ? ball_follow_depth : ball_distance) - ball_follow_depth) / float(100.000 - ball_follow_depth)), move_speed, 0);   // 回り込み
+                                    _motor.run(abs(ball_angle) > BALL_FOLLOW_RANGE ? ball_angle + (ball_angle > 0 ? 90 : -90) : ball_angle * ((90 + BALL_FOLLOW_RANGE) / BALL_FOLLOW_RANGE) * (((ball_distance < ball_follow_depth ? ball_follow_depth : ball_distance) - ball_follow_depth) / float(100.000 - ball_follow_depth)), move_speed);   // 回り込み
                               }
                         }
                   } else if (mode == 2) {   // モード２
                   } else if (mode == 3) {   // モード３
                   } else if (mode == 4) {   // モード４
-                        motor_move(0, 0, 0);
                   }
 
                   // ui
@@ -238,14 +238,7 @@ int main() {
                               display_timer.reset();
                         }
 
-                        motor_1_1.period_us(MOTOR_FREQUENCY);
-                        motor_1_2.period_us(MOTOR_FREQUENCY);
-                        motor_2_1.period_us(MOTOR_FREQUENCY);
-                        motor_2_2.period_us(MOTOR_FREQUENCY);
-                        motor_3_1.period_us(MOTOR_FREQUENCY);
-                        motor_3_2.period_us(MOTOR_FREQUENCY);
-                        motor_4_1.period_us(MOTOR_FREQUENCY);
-                        motor_4_2.period_us(MOTOR_FREQUENCY);
+                        _motor.set_pwm();
                   } else {   // 動いている時
                         display_timer.stop();
                         dt_timer.stop();
@@ -548,71 +541,5 @@ void line_move(uint8_t* line_true, int16_t* line_move_angle, uint8_t* line_brake
             } else if (line_true_unit[3] == 1) {   // 左ライン
                   *line_move_angle = line_back_angle >= 0 && line_back_angle <= 180 ? line_back_angle : line_back_angle - 180;
             }
-      }
-}
-
-void motor_move(int16_t move_angle, int16_t move_speed, uint8_t brake) {
-      if (brake == 1) {   // ブレーキ
-            motor_1_1 = 1;
-            motor_1_2 = 1;
-            motor_2_1 = 1;
-            motor_2_2 = 1;
-            motor_3_1 = 1;
-            motor_3_2 = 1;
-            motor_4_1 = 1;
-            motor_4_2 = 1;
-      } else if (brake == 2) {   // 強制フリー
-            motor_1_1 = 0;
-            motor_1_2 = 0;
-            motor_2_1 = 0;
-            motor_2_2 = 0;
-            motor_3_1 = 0;
-            motor_3_2 = 0;
-            motor_4_1 = 0;
-            motor_4_2 = 0;
-      } else {   // PWM出力
-            int16_t motor[4] = {0, 0, 0, 0};
-            static int16_t pre_motor[4];
-            float maximum_motor = 0;
-            static int16_t pre_p = 0;
-            int16_t pd = 0, p = 0, d = 0;
-
-            if (move_speed > MOTOR_LIMIT) move_speed = MOTOR_LIMIT;   // 速度が上限を超えていないか
-            for (uint8_t count = 0; count < 4; count++) motor[count] = sin((move_angle - (45 + count * 90)) * PI / 180.000) * move_speed * (count < 2 ? -1 : 1);   // 角度とスピードを各モーターの値に変更
-
-            // モーターの最大パフォーマンス発揮
-            for (uint8_t count = 0; count < 4; count++) maximum_motor = maximum_motor < abs(motor[count]) ? abs(motor[count]) : maximum_motor;
-            for (uint8_t count = 0; count < 4 && move_speed > 0; count++) motor[count] *= move_speed / maximum_motor;
-
-            // PD姿勢制御
-            p = 0 - yaw;   // 比例
-            d = p - pre_p;   // 微分
-            pre_p = p;
-            pd = p * KP + d * KD;
-            if (abs(pd) > PD_LIMIT) pd = PD_LIMIT * (abs(pd) / pd);
-            for (uint8_t count = 0; count < 4; count++) {
-                  motor[count] += count < 2 ? -pd : pd;
-                  motor[count] = motor[count] > MOTOR_LIMIT ? MOTOR_LIMIT : motor[count];   // モーターの上限値超えた場合の修正
-                  motor[count] = motor[count] * (1 - MOTOR_RC) + pre_motor[count] * MOTOR_RC;
-                  pre_motor[count] = motor[count];
-            }
-
-            motor_1_1 = abs(motor[0]) < MIN_BRAKE ? 1 : (motor[0] > 0 ? motor[0] * 0.01 : 0);
-            motor_1_2 = abs(motor[0]) < MIN_BRAKE ? 1 : (motor[0] < 0 ? motor[0] * -0.01 : 0);
-            motor_2_1 = abs(motor[1]) < MIN_BRAKE ? 1 : (motor[1] > 0 ? motor[1] * 0.01 : 0);
-            motor_2_2 = abs(motor[1]) < MIN_BRAKE ? 1 : (motor[1] < 0 ? motor[1] * -0.01 : 0);
-            motor_3_1 = abs(motor[2]) < MIN_BRAKE ? 1 : (motor[2] > 0 ? motor[2] * 0.01 : 0);
-            motor_3_2 = abs(motor[2]) < MIN_BRAKE ? 1 : (motor[2] < 0 ? motor[2] * -0.01 : 0);
-            motor_4_1 = abs(motor[3]) < MIN_BRAKE ? 1 : (motor[3] > 0 ? motor[3] * 0.01 : 0);
-            motor_4_2 = abs(motor[3]) < MIN_BRAKE ? 1 : (motor[3] < 0 ? motor[3] * -0.01 : 0); /*
-             oled.clearDisplay();
-             oled.setTextCursor(0, 0);
-             oled.printf("%d\n", move_angle);
-             oled.printf("%d\n", move_speed);
-             oled.printf("%d\n", motor[0]);
-             oled.printf("%d\n", motor[1]);
-             oled.printf("%d\n", motor[2]);
-             oled.printf("%d\n", motor[3]);
-             oled.display();*/
       }
 }

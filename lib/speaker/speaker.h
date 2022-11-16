@@ -3,7 +3,7 @@
 
 #include "mbed.h"
 
-#define SPEAKER_DUTY 0.01
+#define SPEAKER_DUTY 0.1
 
 class speaker {
      public:
