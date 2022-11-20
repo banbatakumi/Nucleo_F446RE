@@ -8,6 +8,7 @@
 class voltage {
      public:
       voltage(PinName voltage_pin_);
+      void read();
       float get();
 
      private:

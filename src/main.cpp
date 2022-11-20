@@ -31,9 +31,9 @@ ball _ball(PB_12, PB_13, PB_14, PC_4, PA_15, PC_11, PD_2, PC_8);
 
 voltage _voltage(PA_5);
 
-motor _motor(PB_3, PA_10, PA_11, PB_5, PB_10, PA_8, PA_9, PB_6);
+motor _motor(PB_3, PA_10, PA_11, PB_5, PB_10, PA_8, PA_9, PB_6);//　45度、135度、225度、315度
 
-line _line(PB_0, PC_1, PC_3, PC_2, PA_4, PC_0, PA_7, PA_6);
+line _line(PB_2, PB_0, PC_1, PC_3, PC_2, PA_4, PC_0, PA_7, PA_6);// ledピン、前ライン、右ライン、後ライン、左ライン
 
 // ピン割当
 Serial arduino_sub(PA_0, PA_1);   // TX, RX
@@ -43,16 +43,14 @@ DigitalIn button_middle(PC_12);
 DigitalIn button_left(PC_10);
 DigitalIn button_right(PC_13);
 
-DigitalOut line_led(PB_2);
-
 // 関数定義
 void line_move(uint8_t* line_true, int16_t* line_move_angle, uint8_t* line_brake);
-void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, float voltage_value, int16_t* move_speed, int16_t* line_move_speed, float dt, uint8_t* ball_follow_depth);
+void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, int16_t* move_speed, int16_t* line_move_speed, float dt, uint8_t* ball_follow_depth);
 
 // グローバル変数定義（なるべく使わないように）
 int16_t yellow_angle = 0, blue_angle = 0;
 
-short yaw, set_yaw;
+int16_t yaw, set_yaw;
 
 // タイマー定義
 Timer display_timer;
@@ -95,7 +93,7 @@ int main() {
 
       bool battery_warning = 0;
       uint16_t voltage_stop_count = 0;
-      float voltage_value = 0, voltage_drop_value = 7.00;
+      float voltage_drop_value = 7.00;
 
       int8_t mode = 0, display_mode = 0, select = 0, set_value = 0, set_mode = 0;
       bool pre_button_middle = 1, pre_button_right = 1, pre_button_left = 1;
@@ -110,9 +108,7 @@ int main() {
       arduino_imu.baud(38400);
 
       // ラインセンサの閾値設定
-      line_led = 1;
       _line.set();
-      line_led = 0;
 
       // モーターPWM周波数の設定
       _motor.set_pwm();
@@ -126,10 +122,10 @@ int main() {
       dt_timer.start();
 
       while (true) {
-            voltage_value = _voltage.get();
+            _voltage.read();
             if (voltage_stop_count > VOLTAGE_STOP_COUNT_NUMBER_OF_TIMES) {   // 電圧低下による停止
                   _motor.free();
-                  line_led = 0;
+                  _line.led(0);
                   if (battery_warning == 0) {
                         oled.clearDisplay();
                         oled.setTextCursor(0, 0);
@@ -156,8 +152,8 @@ int main() {
                   _ball.read();   // IRセンサの値の取得
                   _motor.yaw = yaw;
 
-                  if (voltage_value < voltage_drop_value) voltage_stop_count++;
-                  if (voltage_value > voltage_drop_value && voltage_stop_count > 0) voltage_stop_count--;
+                  if (_voltage.get() < voltage_drop_value) voltage_stop_count++;
+                  if (_voltage.get() > voltage_drop_value && voltage_stop_count > 0) voltage_stop_count--;
 
                   if (mode == 0) {   // UI操作時
                         _motor.free();
@@ -192,7 +188,7 @@ int main() {
                         dt_timer.reset();
 
                         if (display_timer.read() > DISPLAY_UPDATE_RATE) {
-                              ui(&select, display_mode, &set_mode, &set_value, &mode, voltage_value, &move_speed, &line_move_speed, dt, &ball_follow_depth);   // DISPLAY_UPDATE_RATEごとにOLEDを更新する
+                              ui(&select, display_mode, &set_mode, &set_value, &mode, &move_speed, &line_move_speed, dt, &ball_follow_depth);   // DISPLAY_UPDATE_RATEごとにOLEDを更新する
                               display_timer.reset();
                         }
 
@@ -233,14 +229,14 @@ int main() {
       }
 }
 
-void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, float voltage_value, int16_t* move_speed, int16_t* line_move_speed, float dt, uint8_t* ball_follow_depth) {   // UI
+void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, int16_t* move_speed, int16_t* line_move_speed, float dt, uint8_t* ball_follow_depth) {   // UI
       if (*mode == 0) {
             oled.clearDisplay();   // ディスプレイのクリア
             oled.setTextCursor(0, 0);   // 描写位置の設定
             if (*select == 0) {
                   oled.printf("%.2fhz", dt);
                   oled.setTextCursor(95, 0);   // 描写位置の設定
-                  oled.printf("%.2fv\n", voltage_value);
+                  oled.printf("%.2fv\n", _voltage.get());
                   for (int count = 0; count < 128; count++) oled.drawPixel(count, 11, 1);
             }
       }
@@ -249,7 +245,7 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
             if (*select == 0) {
                   oled.printf("main\n");
             } else if (*select == 1) {
-                  line_led = 1;
+                  _line.led(1);
                   if (*mode == 0) {
                         oled.printf("left : offense\n");
                         oled.printf("right: defense");
@@ -265,7 +261,7 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
                   }
                   *mode = *set_value == 1 ? 3 : (*set_value == 2 ? 4 : 0);
             } else {
-                  line_led = 0;
+                  _line.led(0);
                   *select = 0;
                   *set_mode = 0;
                   *set_value = 0;
@@ -307,6 +303,7 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
             if (*select == 0) {
                   oled.printf("line sensor");
             } else if (*select == 1) {
+                  _line.led(1);
                   oled.setTextCursor(20, 0);
                   oled.printf("%d", _line.check(0) == 1 ? 1 : 0);
                   oled.setTextCursor(20, 10);
@@ -326,19 +323,18 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
                   oled.setTextCursor(0, 55);
                   oled.printf("left or right: reset");
 
-                  line_led = 1;
                   *set_mode = 1;
                   if (*set_value == 1 || *set_value == 2) {
                         _line.set();
                         *set_value = 0;
                   }
             } else if (*select == 2) {
+                  _line.led(0);
                   oled.printf("threshpre : %d", _line.threshold);
                   *set_mode = 2;
                   _line.threshold += *set_value * 10;
                   *set_value = 0;
             } else {
-                  line_led = 0;
                   *select = 0;
                   *set_mode = 0;
             }

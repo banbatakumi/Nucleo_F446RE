@@ -8,8 +8,9 @@
 
 class line {
      public:
-      line(PinName front_1_, PinName front_2_, PinName right_1_, PinName right_2_, PinName back_1_, PinName back_2_, PinName left_1_, PinName left_2_);
+      line(PinName led_pin_, PinName front_1_, PinName front_2_, PinName right_1_, PinName right_2_, PinName back_1_, PinName back_2_, PinName left_1_, PinName left_2_);
 
+      void led(bool intensity);
       void read();
       void set();
       bool check_all();
@@ -22,6 +23,7 @@ class line {
       uint16_t threshold;
 
      private:
+      DigitalOut led_pin;
       AnalogIn front_1;
       AnalogIn front_2;
       AnalogIn right_1;
