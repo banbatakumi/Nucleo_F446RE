@@ -346,7 +346,7 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
             if (*select == 0) {
                   oled.printf("ir");
             } else if (*select == 1) {
-                  oled.printf("dir: %d\n", _ball.angle);
+                  oled.printf("ang: %d\n", _ball.angle);
                   oled.printf("dis: %d\n", _ball.distance);
                   oled.printf("rcf: %.2f\n", _ball.rc);
                   for (uint16_t count = 0; count < 360; count += 3) oled.drawPixel(95 + (15 * cos(count * PI / 180.000)), 32 + (15 * sin(count * PI / 180.000)), 1);

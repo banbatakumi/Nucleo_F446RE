@@ -4,6 +4,10 @@
 
 ball::ball(PinName ir_0_, PinName ir_1_, PinName ir_2_, PinName ir_3_, PinName ir_4_, PinName ir_5_, PinName ir_6_, PinName ir_7_) : ir_0(ir_0_), ir_1(ir_1_), ir_2(ir_2_), ir_3(ir_3_), ir_4(ir_4_), ir_5(ir_5_), ir_6(ir_6_), ir_7(ir_7_) {
       rc = 0.5;
+      for (uint8_t count = 0; count < IR_NUM; count++) {
+            unit_vector_x[count] = cos((count * 360.000 / IR_NUM) * PI / 180.000);
+            unit_vector_y[count] = sin((count * 360.000 / IR_NUM) * PI / 180.000);
+      }
 }
 
 void ball::read() {
@@ -33,7 +37,7 @@ void ball::read() {
             result_vector_y += value[count] * unit_vector_y[count];
       }
 
-      angle = atan2(result_vector_x, result_vector_y) / PI * 180.000 + 0.5;
+      angle = atan2(result_vector_y, result_vector_x) / PI * 180.000 + 0.5;
       distance = sqrt(pow(result_vector_x, 2) + pow(result_vector_y, 2)) + 0.5;
       if (distance > 100) distance = 100;
 }

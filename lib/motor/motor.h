@@ -3,15 +3,15 @@
 
 #include "mbed.h"
 
-#define MOTOR_FREQUENCY 30000
+#define PI 3.14159
+
+#define MOTOR_FREQUENCY 30000   // モーターのPWM周波数
 #define MIN_BRAKE 5   // モーターの最小値ブレーキ
 #define POWER_LIMIT 75   // モーターの最大パワー
 #define KP 0.500   // 姿勢制御比例ゲイン
 #define KD 100.000   // 姿制御微分ゲイン
 #define PD_LIMIT 50   // 姿勢制御の最大パワー
 #define POWER_RC 0.1   // モーターのRCフィルタ
-#define PI 3.14159
-
 class motor {
      public:
       motor(PinName motor_1_1_, PinName motor_1_2_, PinName motor_2_1_, PinName motor_2_2_, PinName motor_3_1_, PinName motor_3_2_, PinName motor_4_1_, PinName motor_4_2_);
@@ -33,9 +33,9 @@ class motor {
 
       int16_t power[4];
       int16_t pre_power[4];
-      float maximum_power;
       int16_t pre_p;
       int16_t pd, p, d;
+      float maximum_power;
 };
 
 #endif

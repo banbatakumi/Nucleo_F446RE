@@ -31,10 +31,10 @@ class line {
       AnalogIn left_1;
       AnalogIn left_2;
 
+      bool check_tf[8];
       uint16_t value[8];
       uint16_t pre_value[8];
       uint32_t reaction[8];
-      bool check_tf[8];
 };
 
 #endif
