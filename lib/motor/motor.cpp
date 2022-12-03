@@ -13,7 +13,7 @@ motor::motor(PinName motor_1_1_, PinName motor_1_2_, PinName motor_2_1_, PinName
       motor_4_2 = 0;
 }
 
-void motor::run(int16_t move_angle, int16_t move_speed) {
+void motor::run(int16_t move_angle, int16_t move_speed, int8_t robot_angle) {
       if (move_speed > POWER_LIMIT) move_speed = POWER_LIMIT;   // 速度が上限を超えていないか
       for (uint8_t count = 0; count < 4; count++) power[count] = sin((move_angle - (45 + count * 90)) * PI / 180.000) * move_speed * (count < 2 ? -1 : 1);   // 角度とスピードを各モーターの値に変更
 
@@ -22,7 +22,7 @@ void motor::run(int16_t move_angle, int16_t move_speed) {
       for (uint8_t count = 0; count < 4 && move_speed > 0; count++) power[count] *= move_speed / maximum_power;
 
       // PD姿勢制御
-      p = 0 - yaw;   // 比例
+      p = robot_angle - yaw;   // 比例
       d = p - pre_p;   // 微分
       pre_p = p;
       pd = p * KP + d * KD;

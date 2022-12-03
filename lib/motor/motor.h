@@ -3,10 +3,10 @@
 
 #include "mbed.h"
 
-#define PI 3.14159
+#define PI 3.1415926535   // 円周率
 
 #define MOTOR_FREQUENCY 30000   // モーターのPWM周波数
-#define MIN_BRAKE 5   // モーターの最小値ブレーキ
+#define MIN_BRAKE 10   // モーターの最小値ブレーキ
 #define POWER_LIMIT 75   // モーターの最大パワー
 #define KP 0.500   // 姿勢制御比例ゲイン
 #define KD 100.000   // 姿制御微分ゲイン
@@ -15,7 +15,7 @@
 class motor {
      public:
       motor(PinName motor_1_1_, PinName motor_1_2_, PinName motor_2_1_, PinName motor_2_2_, PinName motor_3_1_, PinName motor_3_2_, PinName motor_4_1_, PinName motor_4_2_);
-      void run(int16_t move_angle, int16_t move_speed);
+      void run(int16_t move_angle, int16_t move_speed, int8_t robot_angle = 0);
       void set_pwm();
       void brake();
       void free();

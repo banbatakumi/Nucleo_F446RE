@@ -3,9 +3,9 @@
 
 #include "mbed.h"
 
-#define PI 3.14159
+#define PI 3.1415926535   // 円周率
 
-#define READ_NUMBER_OF_TIME 250   // ボールセンサを読む回数
+#define READ_NUMBER_OF_TIME 300   // ボールセンサを読む回数
 #define IR_NUM 8   // IRセンサの個数
 #define SAMPLE_NUMBER 25   // n回分の過去に読んだ値の使用
 class ball {
