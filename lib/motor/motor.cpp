@@ -11,6 +11,8 @@ motor::motor(PinName motor_1_1_, PinName motor_1_2_, PinName motor_2_1_, PinName
       motor_3_2 = 0;
       motor_4_1 = 0;
       motor_4_2 = 0;
+
+      d_timer.start();
 }
 
 void motor::run(int16_t move_angle, int16_t move_speed, int8_t robot_angle) {
@@ -19,12 +21,15 @@ void motor::run(int16_t move_angle, int16_t move_speed, int8_t robot_angle) {
 
       // モーターの最大パフォーマンス発揮
       for (uint8_t count = 0; count < 4; count++) maximum_power = maximum_power < abs(power[count]) ? abs(power[count]) : maximum_power;
-      for (uint8_t count = 0; count < 4 && move_speed > 0; count++) power[count] *= move_speed / maximum_power;
+      for (uint8_t count = 0; count < 4 && move_speed > 0; count++) power[count] *= float(move_speed) / maximum_power;
 
       // PD姿勢制御
       p = robot_angle - yaw;   // 比例
-      d = p - pre_p;   // 微分
-      pre_p = p;
+      if (d_timer.read() > D_PERIODO) {
+            d = p - pre_p;   // 微分
+            pre_p = p;
+            d_timer.reset();
+      }
       pd = p * KP + d * KD;
       if (abs(pd) > PD_LIMIT) pd = PD_LIMIT * (abs(pd) / pd);
       for (uint8_t count = 0; count < 4; count++) {
@@ -55,7 +60,7 @@ void motor::set_pwm() {
       motor_4_2.period_us(MOTOR_FREQUENCY);
 }
 
-void motor::brake() {
+void motor::brake(uint16_t brake_time) {
       motor_1_1 = 1;
       motor_1_2 = 1;
       motor_2_1 = 1;
@@ -64,6 +69,7 @@ void motor::brake() {
       motor_3_2 = 1;
       motor_4_1 = 1;
       motor_4_2 = 1;
+      wait_us(brake_time * 1000);
 }
 
 void motor::free() {

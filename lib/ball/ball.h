@@ -5,9 +5,9 @@
 
 #define PI 3.1415926535   // 円周率
 
-#define READ_NUMBER_OF_TIME 300   // ボールセンサを読む回数
+#define READ_NUMBER_OF_TIME 200   // ボールセンサを読む回数
 #define IR_NUM 8   // IRセンサの個数
-#define SAMPLE_NUMBER 25   // n回分の過去に読んだ値の使用
+#define SAMPLE_NUMBER 20   // n回分の過去に読んだ値の使用
 class ball {
      public:
       ball(PinName ir_0_, PinName ir_1_, PinName ir_2_, PinName ir_3_, PinName ir_4_, PinName ir_5_, PinName ir_6_, PinName ir_7_);
