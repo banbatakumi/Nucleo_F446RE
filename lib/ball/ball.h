@@ -5,9 +5,9 @@
 
 #define PI 3.1415926535   // 円周率
 
-#define READ_NUMBER_OF_TIME 200   // ボールセンサを読む回数
+#define READ_NUMBER_OF_TIME 100   // ボールセンサを読む回数
 #define IR_NUM 8   // IRセンサの個数
-#define SAMPLE_NUMBER 20   // n回分の過去に読んだ値の使用
+#define SAMPLE_NUMBER 25   // n回分の過去に読んだ値の使用
 class ball {
      public:
       ball(PinName ir_0_, PinName ir_1_, PinName ir_2_, PinName ir_3_, PinName ir_4_, PinName ir_5_, PinName ir_6_, PinName ir_7_);
@@ -26,7 +26,7 @@ class ball {
       DigitalIn ir_6;
       DigitalIn ir_7;
 
-      uint16_t pre_value[IR_NUM];
+      int16_t pre_angle, pre_distance;
       uint16_t sample_value[SAMPLE_NUMBER][IR_NUM];
       uint32_t value[IR_NUM];
       int32_t result_vector_x, result_vector_y;

@@ -34,7 +34,7 @@ void motor::run(int16_t move_angle, int16_t move_speed, int8_t robot_angle) {
       if (abs(pd) > PD_LIMIT) pd = PD_LIMIT * (abs(pd) / pd);
       for (uint8_t count = 0; count < 4; count++) {
             power[count] += count < 2 ? -pd : pd;
-            power[count] = power[count] > POWER_LIMIT ? POWER_LIMIT : power[count];   // モーターの上限値超えた場合の修正
+            power[count] = abs(power[count]) > POWER_LIMIT ? POWER_LIMIT * (abs(power[count]) / power[count]) : power[count];   // モーターの上限値超えた場合の修正
             power[count] = power[count] * (1 - POWER_RC) + pre_power[count] * POWER_RC;
             pre_power[count] = power[count];
       }

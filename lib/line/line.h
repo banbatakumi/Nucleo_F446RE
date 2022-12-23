@@ -3,7 +3,7 @@
 
 #include "mbed.h"
 
-#define RC 0.5
+#define RC 0.25
 #define REACTION_AVERAGE_NUMBER_OF_TIMES 10000
 
 class line {
