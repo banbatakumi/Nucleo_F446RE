@@ -19,7 +19,7 @@
 #define HIGH_VOLTAGE 8.5
 #define MEDIUM_VOLTAGE 8.0
 
-#define BALL_FOLLOW_RANGE 60.000   // 回り込み時にボールを追い始める角度
+#define BALL_FOLLOW_RANGE 45.000   // 回り込み時にボールを追い始める角度
 #define BALL_FOLLOW_TOGOAL_RANGE 15.000
 
 #define CAM_RC 0.6
@@ -39,7 +39,7 @@ motor _motor(PB_3, PA_10, PA_11, PB_5, PB_10, PA_8, PA_9, PB_6);   // 　45度�
 line _line(PB_2, PB_0, PC_1, PC_3, PC_2, PA_4, PC_0, PA_7, PA_6);   // ledピン、前ライン、右ライン、後ライン、左ライン
 
 // ピン割当
-Serial arduino_sub(PA_0, PA_1);   // TX, RX
+Serial arduino_cam(PA_0, PA_1);   // TX, RX
 Serial arduino_imu(PA_2, PA_3);   // TX, RX
 
 DigitalIn button_middle(PC_12);
@@ -52,6 +52,7 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
 
 // グローバル変数定義（なるべく使わないように）
 int16_t yellow_angle = 0, blue_angle = 0;
+uint16_t back_distance = 0;
 
 int16_t yaw, set_yaw;
 
@@ -75,15 +76,17 @@ void imu_getc() {   // IMU情報の取得
 
 void cam_getc() {   // カメラ情報の入手
       static int16_t pre_blue_angle = 0, pre_yellow_angle = 0;
-      if (arduino_sub.getc() == 'a') {
-            yellow_angle = arduino_sub.getc() - 106;
-            blue_angle = arduino_sub.getc() - 106;
+      if (arduino_cam.getc() == 'a') {
+            yellow_angle = arduino_cam.getc() - 106;
+            blue_angle = arduino_cam.getc() - 106;
             if (yellow_angle == -106) yellow_angle = 0;
             if (blue_angle == -106) blue_angle = 0;
             yellow_angle = yellow_angle * (1 - CAM_RC) + pre_yellow_angle * CAM_RC;
             blue_angle = blue_angle * (1 - CAM_RC) + pre_blue_angle * CAM_RC;
             pre_yellow_angle = yellow_angle;
             pre_blue_angle = blue_angle;
+
+            back_distance = arduino_cam.getc();
       }
 }
 
@@ -113,7 +116,7 @@ int main() {
       float dt = 0;
 
       // serial set up
-      arduino_sub.baud(19200);
+      arduino_cam.baud(19200);
       arduino_imu.baud(38400);
 
       // ラインセンサの閾値設定
@@ -124,7 +127,7 @@ int main() {
 
       // arduinoのシリアル割り込み設定
       arduino_imu.attach(imu_getc, Serial::RxIrq);
-      arduino_sub.attach(cam_getc, Serial::RxIrq);
+      arduino_cam.attach(cam_getc, Serial::RxIrq);
 
       // 必要なタイマーのスタート
       display_timer.start();
@@ -183,7 +186,7 @@ int main() {
                               } else {   // ボールがある時
                                     //_motor.run(abs(_ball.angle) < BALL_FOLLOW_TOGOAL_RANGE ? _ball.angle : (abs(_ball.angle) > BALL_FOLLOW_RANGE ? (_ball.angle + (_ball.angle > 0 ? 90 : -90)) : (_ball.angle * ((90 + BALL_FOLLOW_RANGE) / BALL_FOLLOW_RANGE)) * (((_ball.distance < ball_follow_depth ? ball_follow_depth : _ball.distance) - ball_follow_depth) / float(100 - ball_follow_depth))), move_speed);   // 回り込み
                                     //_motor.run(abs(_ball.angle) < BALL_FOLLOW_TOGOAL_RANGE ? _ball.angle : ((abs(_ball.angle) > BALL_FOLLOW_RANGE ? (_ball.angle > 0 ? 90 : -90) : (_ball.angle * (90.000 / BALL_FOLLOW_RANGE)))) + (_ball.angle * ((((_ball.distance < ball_follow_depth ? ball_follow_depth : _ball.distance) - ball_follow_depth) / float(95 - ball_follow_depth)))), abs(_ball.angle) >= 30 && abs(_ball.angle) <= 60 ? move_speed / 1.500 : move_speed, _ball.distance < 90 ? 0 : (goal_angle == 0 ? blue_angle : yellow_angle) / 2);   // 回り込み
-                                    _motor.run((abs(_ball.angle) <= BALL_FOLLOW_RANGE ? _ball.angle * (90.000 / BALL_FOLLOW_RANGE) : (_ball.angle > 0 ? 90 : -90)) + (_ball.angle * (((_ball.distance < ball_follow_depth ? ball_follow_depth : _ball.distance) - ball_follow_depth) / (100.000 - ball_follow_depth))), move_speed);   // 回り込み
+                                    _motor.run((abs(_ball.angle) <= BALL_FOLLOW_RANGE ? _ball.angle * (90.000 / BALL_FOLLOW_RANGE) : (_ball.angle > 0 ? 90 : -90)) + (_ball.angle * (((_ball.distance < ball_follow_depth ? ball_follow_depth : _ball.distance) - ball_follow_depth) / (90.000 - ball_follow_depth))), abs(_ball.angle) >= 15 && abs(_ball.angle) <= 75 && _ball.distance > 80 ? move_speed / 1.5 : move_speed);   // 回り込み
                               }
                         }
                   } else if (mode == 2) {   // モード２
@@ -298,7 +301,7 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
             }
       } else if (display_mode == -1) {
             if (*select == 0) {
-                  oled.printf("imu");
+                  oled.printf("IMU");
             } else if (*select == 1) {
                   oled.printf("yaw  : %d\n", yaw);
                   oled.printf("left : zero\n");
@@ -379,8 +382,8 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
                   oled.printf("rcf: %.2f\n", _ball.rc);
                   for (uint16_t count = 0; count < 360; count += 3) oled.drawPixel(95 + (15 * cos(count * PI / 180.000)), 32 + (15 * sin(count * PI / 180.000)), 1);
                   for (uint16_t count = 0; count < 360; count += 2) oled.drawPixel(95 + (30 * cos(count * PI / 180.000)), 32 + (30 * sin(count * PI / 180.000)), 1);
-                  for (uint8_t count = 0; count < 64; count++) oled.drawPixel(95, count, 1);
-                  for (uint8_t count = 63; count < 127; count++) oled.drawPixel(count, 32, 1);
+                  for (uint8_t count = 0; count <= 64; count++) oled.drawPixel(95, count, 1);
+                  for (uint8_t count = 63; count <= 127; count++) oled.drawPixel(count, 32, 1);
                   for (uint16_t count = 0; count < 360; count += 10) oled.drawPixel(95 + ((110 - _ball.distance) / 2.5 * cos((_ball.angle - 90) * PI / 180.000)) + (3 * cos(count * PI / 180.000)), 32 + ((110 - _ball.distance) / 2.5 * sin((_ball.angle - 90) * PI / 180.000)) + (3 * sin(count * PI / 180.000)), 1);
                   *set_mode = 2;
                   _ball.rc += *set_value * 0.05;
@@ -412,6 +415,36 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
                   oled.printf("depth : %d\n", *ball_follow_depth);
                   *set_mode = 2;
                   *ball_follow_depth += *set_value * 5;
+                  *set_value = 0;
+            } else {
+                  *select = 0;
+                  *set_mode = 0;
+            }
+      } else if (display_mode == -5) {
+            if (*select == 0) {
+                  oled.printf("distance");
+            } else if (*select == 1) {
+                  oled.printf("dis: %d\n", back_distance);
+                  for (uint16_t count = 30; count <= 34; count++) for (uint16_t count_1 = 0; count_1 < back_distance / 2; count_1 += 1) oled.drawPixel(count_1, count, 1);
+                  for (uint16_t count = 0; count <= 2; count++) for (uint16_t count_1 = 22; count_1 < 42; count_1 += 1) oled.drawPixel(50 * count, count_1, 1);
+                  oled.setTextCursor(0, 45);
+                  oled.printf("0");
+                  oled.setTextCursor(42, 45);
+                  oled.printf("100");
+                  oled.setTextCursor(92, 45);
+                  oled.printf("200");
+            } else {
+                  *select = 0;
+            }
+      } else if (display_mode == 3) {
+            if (*select == 0) {
+                  oled.printf("sub MCU reset");
+            } else if (*select == 1) {
+                  oled.printf("left : CAM MCU\n");
+                  oled.printf("right : IMU MCU");
+                  *set_mode = 1;
+                  if (*set_value == 1) arduino_cam.putc('a');
+                  if (*set_value == 2) arduino_imu.putc('a');
                   *set_value = 0;
             } else {
                   *select = 0;
