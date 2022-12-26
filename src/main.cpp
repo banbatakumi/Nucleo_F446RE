@@ -48,11 +48,14 @@ DigitalIn button_right(PC_13);
 
 // 関数定義
 void line_move(uint8_t* line_tf, int16_t* line_move_angle, uint8_t* line_brake);
-void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, int16_t* move_speed, int16_t* line_move_speed, float dt, uint8_t* ball_follow_depth, bool* goal_angle);
+void offence_move(uint8_t* ball_follow_depth, int16_t* move_speed);
+void diffence_move(uint16_t diffence_line, int16_t* move_speed);
+void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, int16_t* move_speed, int16_t* line_move_speed, float dt, uint8_t* ball_follow_depth);
 
 // グローバル変数定義（なるべく使わないように）
-int16_t yellow_angle = 0, blue_angle = 0;
-uint16_t back_distance = 0;
+uint8_t goal_angle_mode = 1;
+int16_t goal_angle;
+uint16_t back_distance;
 
 int16_t yaw, set_yaw;
 
@@ -61,12 +64,16 @@ Timer display_timer;
 Timer line_timer;
 Timer dt_timer;
 Timer line_brake_timer;
-Timer line_x_timer;
-Timer line_y_timer;
+Timer diffence_timer;
+
+Timer d_timer;
+#define D_PERIODO 0.01
+#define KP 2.5
+#define KD 5
 
 void imu_getc() {   // IMU情報の取得
       if (arduino_imu.getc() == 'a') {
-            short yaw_plus = 0, yaw_minus = 0;
+            int16_t yaw_plus, yaw_minus;
             yaw_plus = arduino_imu.getc();
             yaw_minus = arduino_imu.getc();
             yaw = (yaw_plus == 0 ? yaw_minus * -1 : yaw_plus) - set_yaw;
@@ -75,7 +82,7 @@ void imu_getc() {   // IMU情報の取得
 }
 
 void cam_getc() {   // カメラ情報の入手
-      static int16_t pre_blue_angle = 0, pre_yellow_angle = 0;
+      static int16_t pre_blue_angle, pre_yellow_angle, yellow_angle, blue_angle;
       if (arduino_cam.getc() == 'a') {
             yellow_angle = arduino_cam.getc() - 106;
             blue_angle = arduino_cam.getc() - 106;
@@ -85,6 +92,8 @@ void cam_getc() {   // カメラ情報の入手
             blue_angle = blue_angle * (1 - CAM_RC) + pre_blue_angle * CAM_RC;
             pre_yellow_angle = yellow_angle;
             pre_blue_angle = blue_angle;
+            if (goal_angle_mode == 1) goal_angle = yellow_angle;
+            if (goal_angle_mode == 2) goal_angle = blue_angle;
 
             back_distance = arduino_cam.getc();
       }
@@ -109,9 +118,11 @@ int main() {
       int8_t mode = 0, display_mode = 0, select = 0, set_value = 0, set_mode = 0;
       bool pre_button_middle = 1, pre_button_right = 1, pre_button_left = 1;
 
-      bool goal_angle = 0, pre_moving = 0;
+      bool pre_moving = 0;
       uint8_t ball_follow_depth = 25;
       int16_t move_speed = 50, line_move_speed = 50;
+
+      uint16_t diffence_line = 60;
 
       float dt = 0;
 
@@ -179,17 +190,28 @@ int main() {
                                     _motor.run(line_move_angle, line_move_speed);
                               }
                         } else {
-                              if (abs((goal_angle == 0 ? blue_angle : yellow_angle)) > 75) {   // コートの端
-                                    _motor.run((goal_angle == 0 ? blue_angle : yellow_angle) > 0 ? 135 : -135, move_speed);
-                              } else if (_ball.distance == 0) {   // ボールがない
-                                    _motor.run((goal_angle == 0 ? blue_angle : yellow_angle) > 0 ? 90 : -90, abs((goal_angle == 0 ? blue_angle : yellow_angle)) * 2);
+                              if (_ball.get_distance() == 0) {   // ボールがない
+                                    _motor.run(back_distance > 100 ? (goal_angle > 0 ? 135 : -135) : (goal_angle > 0 ? 45 : -45), abs(100 - back_distance) * 2 + abs(goal_angle) * 2);
                               } else {   // ボールがある時
-                                    //_motor.run(abs(_ball.angle) < BALL_FOLLOW_TOGOAL_RANGE ? _ball.angle : (abs(_ball.angle) > BALL_FOLLOW_RANGE ? (_ball.angle + (_ball.angle > 0 ? 90 : -90)) : (_ball.angle * ((90 + BALL_FOLLOW_RANGE) / BALL_FOLLOW_RANGE)) * (((_ball.distance < ball_follow_depth ? ball_follow_depth : _ball.distance) - ball_follow_depth) / float(100 - ball_follow_depth))), move_speed);   // 回り込み
-                                    //_motor.run(abs(_ball.angle) < BALL_FOLLOW_TOGOAL_RANGE ? _ball.angle : ((abs(_ball.angle) > BALL_FOLLOW_RANGE ? (_ball.angle > 0 ? 90 : -90) : (_ball.angle * (90.000 / BALL_FOLLOW_RANGE)))) + (_ball.angle * ((((_ball.distance < ball_follow_depth ? ball_follow_depth : _ball.distance) - ball_follow_depth) / float(95 - ball_follow_depth)))), abs(_ball.angle) >= 30 && abs(_ball.angle) <= 60 ? move_speed / 1.500 : move_speed, _ball.distance < 90 ? 0 : (goal_angle == 0 ? blue_angle : yellow_angle) / 2);   // 回り込み
-                                    _motor.run((abs(_ball.angle) <= BALL_FOLLOW_RANGE ? _ball.angle * (90.000 / BALL_FOLLOW_RANGE) : (_ball.angle > 0 ? 90 : -90)) + (_ball.angle * (((_ball.distance < ball_follow_depth ? ball_follow_depth : _ball.distance) - ball_follow_depth) / (90.000 - ball_follow_depth))), abs(_ball.angle) >= 15 && abs(_ball.angle) <= 75 && _ball.distance > 80 ? move_speed / 1.5 : move_speed);   // 回り込み
+                                    offence_move(&ball_follow_depth, &move_speed);
                               }
                         }
                   } else if (mode == 2) {   // モード２
+                        line_move(&line_tf, &line_move_angle, &line_brake);
+
+                        if (line_tf != 0) {
+                              if (line_brake == 1) {
+                                    _motor.brake();
+                              } else {
+                                    _motor.run(line_move_angle, line_move_speed);
+                              }
+                        } else {
+                              if (_ball.get_distance() == 0) {   // ボールがない
+                                    _motor.run(back_distance > 100 ? (goal_angle > 0 ? 135 : -135) : (goal_angle > 0 ? 45 : -45), abs(100 - back_distance) * 2 + abs(goal_angle) * 2);
+                              } else {   // ボールがある時
+                                    diffence_move(diffence_line, &move_speed);
+                              }
+                        }
                   } else if (mode == 3) {   // モード３
                         line_move(&line_tf, &line_move_angle, &line_brake);
 
@@ -200,7 +222,7 @@ int main() {
                                     _motor.run(line_move_angle, line_move_speed);
                               }
                         } else {
-                              _motor.run(_ball.angle, move_speed);
+                              _motor.run(_ball.get_angle(), move_speed);
                         }
                   } else if (mode == 4) {   // モード４
                         _motor.run(0, 0);
@@ -215,7 +237,7 @@ int main() {
                         pre_moving = 0;
 
                         if (display_timer.read() > DISPLAY_UPDATE_RATE) {
-                              ui(&select, display_mode, &set_mode, &set_value, &mode, &move_speed, &line_move_speed, dt, &ball_follow_depth, &goal_angle);   // DISPLAY_UPDATE_RATEごとにOLEDを更新する
+                              ui(&select, display_mode, &set_mode, &set_value, &mode, &move_speed, &line_move_speed, dt, &ball_follow_depth);   // DISPLAY_UPDATE_RATEごとにOLEDを更新する
                               display_timer.reset();
                         }
                   } else {   // 動いている時
@@ -261,7 +283,167 @@ int main() {
       }
 }
 
-void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, int16_t* move_speed, int16_t* line_move_speed, float dt, uint8_t* ball_follow_depth, bool* goal_angle) {   // UI
+void offence_move(uint8_t* ball_follow_depth, int16_t* move_speed) {
+      int16_t tmp_move_speed, tmp_move_angle, ball_angle, ball_distance;
+      float move_angle_decrement;
+      ball_angle = _ball.get_angle();
+      ball_distance = _ball.get_distance();
+
+      // 方向
+      if (abs(ball_angle) <= BALL_FOLLOW_RANGE) {
+            tmp_move_angle = ball_angle + (90.000 / BALL_FOLLOW_RANGE * ball_angle);
+      } else {
+            move_angle_decrement = ((ball_distance < *ball_follow_depth ? *ball_follow_depth : ball_distance) - *ball_follow_depth) / float(90.000 - *ball_follow_depth);
+            tmp_move_angle = (ball_angle > 0 ? 90 : -90) + (ball_angle * move_angle_decrement);
+      }
+
+      tmp_move_speed = *move_speed;
+
+      _motor.run(tmp_move_angle, tmp_move_speed);   // 回り込み
+}
+
+void diffence_move(uint16_t diffence_line, int16_t* move_speed) {
+      int16_t tmp_move_speed, tmp_move_angle, robot_angle, ball_angle, ball_distance;
+      static int16_t pre_p;
+      static int16_t p, d;
+
+      if (diffence_timer.read() > 2.5) {
+            if (diffence_timer.read() < 10 && back_distance < 100) {
+                  tmp_move_angle = ball_angle * 2;
+                  tmp_move_speed = *move_speed;
+                  if (goal_angle_mode != 0 && goal_angle != 0 && back_distance > 80) robot_angle = goal_angle > 0 ? 45 : -45;
+            } else {
+                  diffence_timer.reset();
+                  diffence_timer.stop();
+            }
+      } else {
+            if (ball_angle > -15 && ball_angle < 15) {
+                  diffence_timer.start();
+            } else {
+                  diffence_timer.reset();
+                  diffence_timer.stop();
+            }
+
+            d_timer.start();
+            p = 0 - ball_angle;   // 比例
+            if (d_timer.read() > D_PERIODO) {
+                  d = p - pre_p;   // 微分
+                  pre_p = p;
+                  d_timer.reset();
+            }
+
+            if (ball_angle > 0) {
+                  if (back_distance > diffence_line) {
+                        tmp_move_angle = 90 + abs(diffence_line - back_distance) * 3;
+                  } else {
+                        tmp_move_angle = 90 - abs(diffence_line - back_distance) * 3;
+                  }
+
+                  if (tmp_move_angle < 0) {
+                        tmp_move_angle = 0;
+                        tmp_move_speed = *move_speed;
+                  } else if (tmp_move_angle > 180) {
+                        tmp_move_angle = 180;
+                        tmp_move_speed = *move_speed;
+                  } else {
+                        tmp_move_speed = tmp_move_speed = abs(p * KP + d * KD);
+                  }
+            } else {
+                  if (back_distance > diffence_line) {
+                        tmp_move_angle = -90 - abs(diffence_line - back_distance) * 3;
+                  } else {
+                        tmp_move_angle = -90 + abs(diffence_line - back_distance) * 3;
+                  }
+
+                  if (tmp_move_angle > 0) {
+                        tmp_move_angle = 0;
+                        tmp_move_speed = *move_speed;
+                  } else if (tmp_move_angle < -180) {
+                        tmp_move_angle = 180;
+                        tmp_move_speed = *move_speed;
+                  } else {
+                        tmp_move_speed = tmp_move_speed = abs(p * KP + d * KD);
+                  }
+            }
+      }
+      if (tmp_move_speed > *move_speed) tmp_move_speed = *move_speed;
+      _motor.run(tmp_move_angle, tmp_move_speed, robot_angle);   // 回り込み
+}
+
+void line_move(uint8_t* line_tf, int16_t* line_move_angle, uint8_t* line_brake) {
+      uint8_t line_tf_unit[4] = {0, 0, 0, 0};
+      int16_t ball_angle;
+      static uint8_t pre_line = 0;
+      static int16_t line_back_angle = 0;
+      float line_unit_vector_x[8] = {0, 0, 0.5, 1, 0, 0, -0.5, -1};
+      float line_unit_vector_y[8] = {0.5, 1, 0, 0, -0.5, -1, 0, 0};
+      static float line_result_vector_x = 0, line_result_vector_y = 0;
+      static float pre_line_result_vector_x = 0, pre_line_result_vector_y = 0;
+      *line_brake = 0;
+      ball_angle = _ball.get_angle();
+
+      for (uint8_t count = 0; count < 4; count++) line_tf_unit[count] = *line_tf == count + 1 || *line_tf == count + 5 ? 1 : 0;
+
+      if (_line.check_all() == 1) {   // いずれかのラインセンサが反応している時
+            line_timer.start();
+            line_timer.reset();
+            if (*line_tf == 0) line_brake_timer.start();
+            for (uint8_t count = 0; count < 8; count++) {
+                  if (_line.check(count) == 1) pre_line = count;   // 最後に反応したラインセンサの記憶
+            }
+
+            if (_line.check_front() == 1 && *line_tf <= 4) *line_tf = 1;   // 前外ライン
+            if (_line.check(1) == 1 && *line_tf == 1) *line_tf = 5;   // 前内ライン
+            if (_line.check_right() == 1 && *line_tf <= 4) *line_tf = 2;   // 前外ライン
+            if (_line.check(3) == 1 && *line_tf == 2) *line_tf = 6;   // 前内ライン
+            if (_line.check_back() == 1 && *line_tf <= 4) *line_tf = 3;   // 前外ライン
+            if (_line.check(5) == 1 && *line_tf == 3) *line_tf = 7;   // 前内ライン
+            if (_line.check_left() == 1 && *line_tf <= 4) *line_tf = 4;   // 前外ライン
+            if (_line.check(7) == 1 && *line_tf == 4) *line_tf = 8;   // 前内ライン
+      }
+
+      if (line_brake_timer.read() <= 0.05) {
+            *line_brake = 1;
+      } else if ((line_tf_unit[0] == 1 && pre_line != 4) || (line_tf_unit[1] == 1 && pre_line != 6) || (line_tf_unit[2] == 1 && pre_line != 0) || (line_tf_unit[3] == 1 && pre_line != 2)) {   // ライン処理から通常処理に戻る
+            if (line_timer.read() > 0.1) {
+                  if (_line.check_all() == 1 || line_timer.read() > 3 || (line_tf_unit[0] == 1 && (ball_angle < -60 || ball_angle > 60)) || (line_tf_unit[2] == 1 && (ball_angle > -90 && ball_angle < 90)) || (line_tf_unit[1] == 1 && (ball_angle > 90 || ball_angle < 0)) || (line_tf_unit[3] == 1 && (ball_angle < -90 || ball_angle > 0))) {
+                        *line_tf = 0;
+                        line_timer.stop();
+                        line_timer.reset();
+                        line_brake_timer.stop();
+                        line_brake_timer.reset();
+                  }
+            }
+            *line_brake = _line.check_all() == 0 ? 1 : 0;
+      }
+
+      if (*line_tf != 0) {
+            if (_line.check_all() == 1) {
+                  line_result_vector_x = 0;
+                  line_result_vector_y = 0;
+            }
+            for (uint8_t count = 0; count < 8; count++) {
+                  line_result_vector_x += _line.check(count) * line_unit_vector_x[count];
+                  line_result_vector_y += _line.check(count) * line_unit_vector_y[count];
+            }
+            if (pre_line_result_vector_x != line_result_vector_x || pre_line_result_vector_y != line_result_vector_y) line_back_angle = atan2(line_result_vector_x, line_result_vector_y) / PI * 180.000 + 180.5;
+            pre_line_result_vector_x = line_result_vector_x;
+            pre_line_result_vector_y = line_result_vector_y;
+            if (line_back_angle > 180) line_back_angle -= 360;
+      }
+
+      if (line_tf_unit[0] == 1) {   // 前ライン
+            *line_move_angle = line_back_angle <= -90 || line_back_angle >= 90 ? line_back_angle : line_back_angle - 180;
+      } else if (line_tf_unit[1] == 1) {   // 右ライン
+            *line_move_angle = line_back_angle >= -180 && line_back_angle <= 0 ? line_back_angle : line_back_angle - 180;
+      } else if (line_tf_unit[2] == 1) {   // 後ライン
+            *line_move_angle = line_back_angle >= -90 && line_back_angle <= 90 ? line_back_angle : line_back_angle - 180;
+      } else if (line_tf_unit[3] == 1) {   // 左ライン
+            *line_move_angle = line_back_angle >= 0 && line_back_angle <= 180 ? line_back_angle : line_back_angle - 180;
+      }
+}
+
+void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value, int8_t* mode, int16_t* move_speed, int16_t* line_move_speed, float dt, uint8_t* ball_follow_depth) {   // UI
       if (*mode == 0) {
             oled.clearDisplay();   // ディスプレイのクリア
             oled.setTextCursor(0, 0);   // 描写位置の設定
@@ -308,7 +490,7 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
                   oled.printf("right : offset");
                   *set_mode = 1;
                   if (*set_value == 1) set_yaw += yaw;
-                  if (*set_value == 2){
+                  if (*set_value == 2) {
                         set_yaw = 0;
                         arduino_imu.putc('a');
                   }
@@ -377,32 +559,34 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
             if (*select == 0) {
                   oled.printf("ir");
             } else if (*select == 1) {
-                  oled.printf("ang: %d\n", _ball.angle);
-                  oled.printf("dis: %d\n", _ball.distance);
-                  oled.printf("rcf: %.2f\n", _ball.rc);
+                  oled.printf("ang: %d\n", _ball.get_angle());
+                  oled.printf("dis: %d\n", _ball.get_distance());
                   for (uint16_t count = 0; count < 360; count += 3) oled.drawPixel(95 + (15 * cos(count * PI / 180.000)), 32 + (15 * sin(count * PI / 180.000)), 1);
                   for (uint16_t count = 0; count < 360; count += 2) oled.drawPixel(95 + (30 * cos(count * PI / 180.000)), 32 + (30 * sin(count * PI / 180.000)), 1);
                   for (uint8_t count = 0; count <= 64; count++) oled.drawPixel(95, count, 1);
                   for (uint8_t count = 63; count <= 127; count++) oled.drawPixel(count, 32, 1);
-                  for (uint16_t count = 0; count < 360; count += 10) oled.drawPixel(95 + ((110 - _ball.distance) / 2.5 * cos((_ball.angle - 90) * PI / 180.000)) + (3 * cos(count * PI / 180.000)), 32 + ((110 - _ball.distance) / 2.5 * sin((_ball.angle - 90) * PI / 180.000)) + (3 * sin(count * PI / 180.000)), 1);
-                  *set_mode = 2;
-                  _ball.rc += *set_value * 0.05;
-                  *set_value = 0;
+                  for (uint16_t count = 0; count < 360; count += 10) oled.drawPixel(95 + ((110 - _ball.get_distance()) / 2.5 * cos((_ball.get_angle() - 90) * PI / 180.000)) + (3 * cos(count * PI / 180.000)), 32 + ((110 - _ball.get_distance()) / 2.5 * sin((_ball.get_angle() - 90) * PI / 180.000)) + (3 * sin(count * PI / 180.000)), 1);
             } else {
-                  *set_mode = 0;
                   *select = 0;
             }
       } else if (display_mode == -2) {
             if (*select == 0) {
                   oled.printf("camera");
             } else if (*select == 1) {
-                  oled.printf("yellow: %d\n", yellow_angle);
-                  oled.printf("blue  : %d\n", blue_angle);
-                  if (*goal_angle == 0) oled.printf("goal angle: blue");
-                  if (*goal_angle == 1) oled.printf("goal angle: yellow");
+                  if (goal_angle_mode == 0) oled.printf("off\n");
+                  if (goal_angle_mode == 1) oled.printf("yellow: %d\n", goal_angle);
+                  if (goal_angle_mode == 2) oled.printf("blue  : %d\n", goal_angle);
+                  oled.printf("left  : yellow\n");
+                  oled.printf("right : blue");
                   *set_mode = 1;
-                  if (*set_value == 1) *goal_angle = 0;
-                  if (*set_value == 2) *goal_angle = 1;
+                  if (*set_value == 1) goal_angle_mode = 1;
+                  if (*set_value == 2) goal_angle_mode = 2;
+                  *set_value = 0;
+            } else if (*select == 2) {
+                  if (goal_angle_mode == 0) oled.printf("left or right : off");
+                  if (goal_angle_mode == 1) oled.printf("yellow: %d\n", goal_angle);
+                  if (goal_angle_mode == 2) oled.printf("blue  : %d\n", goal_angle);
+                  if (*set_value == 1 || *set_value == 2) goal_angle_mode = 0;
                   *set_value = 0;
             } else {
                   *select = 0;
@@ -425,8 +609,10 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
                   oled.printf("distance");
             } else if (*select == 1) {
                   oled.printf("dis: %d\n", back_distance);
-                  for (uint16_t count = 30; count <= 34; count++) for (uint16_t count_1 = 0; count_1 < back_distance / 2; count_1 += 1) oled.drawPixel(count_1, count, 1);
-                  for (uint16_t count = 0; count <= 2; count++) for (uint16_t count_1 = 22; count_1 < 42; count_1 += 1) oled.drawPixel(50 * count, count_1, 1);
+                  for (uint16_t count = 30; count <= 34; count++)
+                        for (uint16_t count_1 = 0; count_1 < back_distance / 2; count_1 += 1) oled.drawPixel(count_1, count, 1);
+                  for (uint16_t count = 0; count <= 2; count++)
+                        for (uint16_t count_1 = 22; count_1 < 42; count_1 += 1) oled.drawPixel(50 * count, count_1, 1);
                   oled.setTextCursor(0, 45);
                   oled.printf("0");
                   oled.setTextCursor(42, 45);
@@ -452,76 +638,4 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
             }
       }
       oled.display();
-}
-
-void line_move(uint8_t* line_tf, int16_t* line_move_angle, uint8_t* line_brake) {
-      uint8_t line_tf_unit[4] = {0, 0, 0, 0};
-      static uint8_t pre_line = 0;
-      static int16_t line_back_angle = 0;
-      float line_unit_vector_x[8] = {0, 0, 0.5, 1, 0, 0, -0.5, -1};
-      float line_unit_vector_y[8] = {0.5, 1, 0, 0, -0.5, -1, 0, 0};
-      static float line_result_vector_x = 0, line_result_vector_y = 0;
-      static float pre_line_result_vector_x = 0, pre_line_result_vector_y = 0;
-      *line_brake = 0;
-
-      for (uint8_t count = 0; count < 4; count++) line_tf_unit[count] = *line_tf == count + 1 || *line_tf == count + 5 ? 1 : 0;
-
-      if (_line.check_all() == 1) {   // いずれかのラインセンサが反応している時
-            line_timer.start();
-            line_timer.reset();
-            if (*line_tf == 0) line_brake_timer.start();
-            if (*line_tf == 0) _motor.brake(50);
-            for (uint8_t count = 0; count < 8; count++) {
-                  if (_line.check(count) == 1) pre_line = count;   // 最後に反応したラインセンサの記憶
-            }
-
-            if (_line.check_front() == 1 && *line_tf <= 4) *line_tf = 1;   // 前外ライン
-            if (_line.check(1) == 1 && *line_tf == 1) *line_tf = 5;   // 前内ライン
-            if (_line.check_right() == 1 && *line_tf <= 4) *line_tf = 2;   // 前外ライン
-            if (_line.check(3) == 1 && *line_tf == 2) *line_tf = 6;   // 前内ライン
-            if (_line.check_back() == 1 && *line_tf <= 4) *line_tf = 3;   // 前外ライン
-            if (_line.check(5) == 1 && *line_tf == 3) *line_tf = 7;   // 前内ライン
-            if (_line.check_left() == 1 && *line_tf <= 4) *line_tf = 4;   // 前外ライン
-            if (_line.check(7) == 1 && *line_tf == 4) *line_tf = 8;   // 前内ライン
-      }
-
-      if (line_brake_timer.read() <= 0) {
-            *line_brake = 1;
-      } else if ((line_tf_unit[0] == 1 && pre_line != 4) || (line_tf_unit[1] == 1 && pre_line != 6) || (line_tf_unit[2] == 1 && pre_line != 0) || (line_tf_unit[3] == 1 && pre_line != 2)) {   // ライン処理から通常処理に戻る
-            if (line_timer.read() > 0.1) {
-                  if (_line.check_all() == 1 || line_timer.read() > 3 || (line_tf_unit[0] == 1 && (_ball.angle < -60 || _ball.angle > 60)) || (line_tf_unit[2] == 1 && (_ball.angle > -90 && _ball.angle < 90)) || (line_tf_unit[1] == 1 && (_ball.angle > 90 || _ball.angle < 30)) || (line_tf_unit[3] == 1 && (_ball.angle < -90 || _ball.angle > -30))) {
-                        *line_tf = 0;
-                        line_timer.stop();
-                        line_timer.reset();
-                        line_brake_timer.stop();
-                        line_brake_timer.reset();
-                  }
-            }
-            *line_brake = _line.check_all() == 0 ? 1 : 0;
-      }
-
-      if (*line_tf != 0) {
-            if (_line.check_all() == 1) {
-                  line_result_vector_x = 0;
-                  line_result_vector_y = 0;
-            }
-            for (uint8_t count = 0; count < 8; count++) {
-                  line_result_vector_x += _line.check(count) * line_unit_vector_x[count];
-                  line_result_vector_y += _line.check(count) * line_unit_vector_y[count];
-            }
-            if (pre_line_result_vector_x != line_result_vector_x || pre_line_result_vector_y != line_result_vector_y) line_back_angle = atan2(line_result_vector_x, line_result_vector_y) / PI * 180.000 + 180.5;
-            pre_line_result_vector_x = line_result_vector_x;
-            pre_line_result_vector_y = line_result_vector_y;
-            if (line_back_angle > 180) line_back_angle -= 360;
-      }
-
-      if (line_tf_unit[0] == 1) {   // 前ライン
-            *line_move_angle = line_back_angle <= -90 || line_back_angle >= 90 ? line_back_angle : line_back_angle - 180;
-      } else if (line_tf_unit[1] == 1) {   // 右ライン
-            *line_move_angle = line_back_angle >= -180 && line_back_angle <= 0 ? line_back_angle : line_back_angle - 180;
-      } else if (line_tf_unit[2] == 1) {   // 後ライン
-            *line_move_angle = line_back_angle >= -90 && line_back_angle <= 90 ? line_back_angle : line_back_angle - 180;
-      } else if (line_tf_unit[3] == 1) {   // 左ライン
-            *line_move_angle = line_back_angle >= 0 && line_back_angle <= 180 ? line_back_angle : line_back_angle - 180;
-      }
 }

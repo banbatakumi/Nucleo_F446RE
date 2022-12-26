@@ -3,7 +3,6 @@
 #include "mbed.h"
 
 ball::ball(PinName ir_0_, PinName ir_1_, PinName ir_2_, PinName ir_3_, PinName ir_4_, PinName ir_5_, PinName ir_6_, PinName ir_7_) : ir_0(ir_0_), ir_1(ir_1_), ir_2(ir_2_), ir_3(ir_3_), ir_4(ir_4_), ir_5(ir_5_), ir_6(ir_6_), ir_7(ir_7_) {
-      rc = 0.2;
       for (uint8_t count = 0; count < IR_NUM; count++) {
             unit_vector_x[count] = cos((count * 360.000 / IR_NUM) * PI / 180.000);
             unit_vector_y[count] = sin((count * 360.000 / IR_NUM) * PI / 180.000);
@@ -36,10 +35,21 @@ void ball::read() {
       }
 
       angle = atan2(result_vector_y, result_vector_x) / PI * 180.000 + 0.5;
-      distance = sqrt(pow(result_vector_x, 2) + pow(result_vector_y, 2)) + 0.5;
-      angle = angle * (1 - rc) + pre_angle * rc;
+      distance = 0;
+      for (uint8_t count = 0; count < IR_NUM; count++) distance = distance < value[count] + 30 ? value[count] + 30 : distance;
+      // sqrt(pow(result_vector_x, 2) + pow(result_vector_y, 2)) + 0.5;
+      angle = angle * (1 - ANGLE_RC) + pre_angle * ANGLE_RC;
       pre_angle = angle;
-      distance = distance * (1 - rc) + pre_distance * rc;
+      distance = distance * (1 - DISTANCE_RC) + pre_distance * DISTANCE_RC;
       pre_distance = distance;
       if (distance > 100) distance = 100;
+      if (distance == 30) distance = 0;
+}
+
+int16_t ball::get_angle() {
+      return angle;
+}
+
+int16_t ball::get_distance() {
+      return distance;
 }

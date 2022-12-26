@@ -11,7 +11,7 @@
 #define KP 1.000   // 姿勢制御比例ゲイン
 #define KD 8.000   // 姿制御微分ゲイン
 #define PD_LIMIT 30   // 姿勢制御の最大パワー
-#define POWER_RC 0.2   // モーターのRCフィルタ
+#define POWER_RC 0.1  // モーターのRCフィルタ
 #define D_PERIODO 0.01
 class motor {
      public:
