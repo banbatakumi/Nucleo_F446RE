@@ -16,13 +16,14 @@
 #define DISPLAY_UPDATE_RATE 0.05   // OLEDの更新時間
 
 #define VOLTAGE_STOP_COUNT_NUMBER_OF_TIMES 500   // 停止する電圧低下の回数
-#define HIGH_VOLTAGE 8.5
-#define MEDIUM_VOLTAGE 8.0
 
 #define BALL_FOLLOW_RANGE 45.000   // 回り込み時にボールを追い始める角度
-#define BALL_FOLLOW_TOGOAL_RANGE 15.000
 
 #define CAM_RC 0.6
+
+#define D_PERIODO 0.01
+#define KP 2.5
+#define KD 2.5
 
 // I2Cの設定
 I2C i2c(PB_9, PB_8);
@@ -65,11 +66,7 @@ Timer line_timer;
 Timer dt_timer;
 Timer line_brake_timer;
 Timer diffence_timer;
-
 Timer d_timer;
-#define D_PERIODO 0.01
-#define KP 2.5
-#define KD 5
 
 void imu_getc() {   // IMU情報の取得
       if (arduino_imu.getc() == 'a') {
@@ -120,7 +117,7 @@ int main() {
 
       bool pre_moving = 0;
       uint8_t ball_follow_depth = 25;
-      int16_t move_speed = 50, line_move_speed = 50;
+      int16_t move_speed = 50, line_move_speed = 60;
 
       uint16_t diffence_line = 60;
 
@@ -207,7 +204,7 @@ int main() {
                               }
                         } else {
                               if (_ball.get_distance() == 0) {   // ボールがない
-                                    _motor.run(back_distance > 100 ? (goal_angle > 0 ? 135 : -135) : (goal_angle > 0 ? 45 : -45), abs(100 - back_distance) * 2 + abs(goal_angle) * 2);
+                                    _motor.run(back_distance > diffence_line ? (goal_angle > 0 ? 135 : -135) : (goal_angle > 0 ? 45 : -45), abs(diffence_line - back_distance) * 2 + abs(goal_angle) * 2);
                               } else {   // ボールがある時
                                     diffence_move(diffence_line, &move_speed);
                               }
@@ -293,9 +290,12 @@ void offence_move(uint8_t* ball_follow_depth, int16_t* move_speed) {
       if (abs(ball_angle) <= BALL_FOLLOW_RANGE) {
             tmp_move_angle = ball_angle + (90.000 / BALL_FOLLOW_RANGE * ball_angle);
       } else {
-            move_angle_decrement = ((ball_distance < *ball_follow_depth ? *ball_follow_depth : ball_distance) - *ball_follow_depth) / float(90.000 - *ball_follow_depth);
+            move_angle_decrement = ((ball_distance < *ball_follow_depth ? *ball_follow_depth : ball_distance) - *ball_follow_depth) / float(95.000 - *ball_follow_depth);
             tmp_move_angle = (ball_angle > 0 ? 90 : -90) + (ball_angle * move_angle_decrement);
       }
+      if (tmp_move_angle > 180) tmp_move_angle -= 360;
+      if (tmp_move_angle < -180) tmp_move_angle += 360;
+      if ((tmp_move_angle > 120 || tmp_move_angle < -120) && back_distance < 20) tmp_move_angle = tmp_move_angle > 0 ? 90 : -90;
 
       tmp_move_speed = *move_speed;
 
@@ -303,15 +303,17 @@ void offence_move(uint8_t* ball_follow_depth, int16_t* move_speed) {
 }
 
 void diffence_move(uint16_t diffence_line, int16_t* move_speed) {
-      int16_t tmp_move_speed, tmp_move_angle, robot_angle, ball_angle, ball_distance;
+      int16_t tmp_move_speed, tmp_move_angle, robot_angle, ball_angle, ball_x;
       static int16_t pre_p;
       static int16_t p, d;
+      ball_angle = _ball.get_angle();
+      ball_x = _ball.get_x();
 
       if (diffence_timer.read() > 2.5) {
             if (diffence_timer.read() < 10 && back_distance < 100) {
                   tmp_move_angle = ball_angle * 2;
                   tmp_move_speed = *move_speed;
-                  if (goal_angle_mode != 0 && goal_angle != 0 && back_distance > 80) robot_angle = goal_angle > 0 ? 45 : -45;
+                  if (goal_angle_mode != 0 && goal_angle != 0 && back_distance > 80 && (goal_angle > 30 || goal_angle < -30)) robot_angle = goal_angle > 0 ? 60 : -60;
             } else {
                   diffence_timer.reset();
                   diffence_timer.stop();
@@ -325,14 +327,14 @@ void diffence_move(uint16_t diffence_line, int16_t* move_speed) {
             }
 
             d_timer.start();
-            p = 0 - ball_angle;   // 比例
+            p = 0 - ball_x;   // 比例
             if (d_timer.read() > D_PERIODO) {
                   d = p - pre_p;   // 微分
                   pre_p = p;
                   d_timer.reset();
             }
 
-            if (ball_angle > 0) {
+            if (ball_x > 0) {
                   if (back_distance > diffence_line) {
                         tmp_move_angle = 90 + abs(diffence_line - back_distance) * 3;
                   } else {
@@ -346,7 +348,7 @@ void diffence_move(uint16_t diffence_line, int16_t* move_speed) {
                         tmp_move_angle = 180;
                         tmp_move_speed = *move_speed;
                   } else {
-                        tmp_move_speed = tmp_move_speed = abs(p * KP + d * KD);
+                        tmp_move_speed = abs(p * KP + d * KD);
                   }
             } else {
                   if (back_distance > diffence_line) {
@@ -362,7 +364,7 @@ void diffence_move(uint16_t diffence_line, int16_t* move_speed) {
                         tmp_move_angle = 180;
                         tmp_move_speed = *move_speed;
                   } else {
-                        tmp_move_speed = tmp_move_speed = abs(p * KP + d * KD);
+                        tmp_move_speed = abs(p * KP + d * KD);
                   }
             }
       }

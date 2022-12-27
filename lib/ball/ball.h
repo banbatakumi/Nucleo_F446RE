@@ -16,6 +16,8 @@ class ball {
       void read();
       int16_t get_angle();
       int16_t get_distance();
+      int16_t get_x();
+      int16_t get_y();
 
      private:
       DigitalIn ir_0;
@@ -29,8 +31,7 @@ class ball {
 
       int16_t pre_angle, pre_distance, angle, distance;
       uint16_t sample_value[SAMPLE_NUMBER][IR_NUM];
-      int32_t result_vector_x, result_vector_y;
-      uint32_t value[IR_NUM];
+      int32_t result_vector_x, result_vector_y, value[IR_NUM];
       float unit_vector_x[IR_NUM];
       float unit_vector_y[IR_NUM];
 };

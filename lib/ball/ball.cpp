@@ -37,7 +37,7 @@ void ball::read() {
       angle = atan2(result_vector_y, result_vector_x) / PI * 180.000 + 0.5;
       distance = 0;
       for (uint8_t count = 0; count < IR_NUM; count++) distance = distance < value[count] + 30 ? value[count] + 30 : distance;
-      // sqrt(pow(result_vector_x, 2) + pow(result_vector_y, 2)) + 0.5;
+
       angle = angle * (1 - ANGLE_RC) + pre_angle * ANGLE_RC;
       pre_angle = angle;
       distance = distance * (1 - DISTANCE_RC) + pre_distance * DISTANCE_RC;
@@ -52,4 +52,12 @@ int16_t ball::get_angle() {
 
 int16_t ball::get_distance() {
       return distance;
+}
+
+int16_t ball::get_x() {
+      return result_vector_y;
+}
+
+int16_t ball::get_y() {
+      return result_vector_x;
 }
