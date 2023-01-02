@@ -20,8 +20,9 @@ void motor::run(int16_t move_angle, int16_t move_speed, int8_t robot_angle) {
       for (uint8_t count = 0; count < 4; count++) power[count] = sin((move_angle - (45 + count * 90)) * PI / 180.000) * move_speed * (count < 2 ? -1 : 1);   // 角度とスピードを各モーターの値に変更
 
       // モーターの最大パフォーマンス発揮
+      maximum_power = 0;
       for (uint8_t count = 0; count < 4; count++) maximum_power = maximum_power < abs(power[count]) ? abs(power[count]) : maximum_power;
-      for (uint8_t count = 0; count < 4 && move_speed > 0; count++) power[count] *= float(move_speed) / maximum_power;
+      for (uint8_t count = 0; count < 4; count++) power[count] *= float(move_speed) / maximum_power;
 
       // PD姿勢制御
       p = robot_angle - yaw;   // 比例
@@ -32,12 +33,18 @@ void motor::run(int16_t move_angle, int16_t move_speed, int8_t robot_angle) {
       }
       pd = p * KP + d * KD;
       if (abs(pd) > PD_LIMIT) pd = PD_LIMIT * (abs(pd) / pd);
+
+      if (moving_average_count == MOVING_AVERAGE_COUNT_NUMBER) moving_average_count = 0;
       for (uint8_t count = 0; count < 4; count++) {
             power[count] += count < 2 ? -pd : pd;
             power[count] = abs(power[count]) > POWER_LIMIT ? POWER_LIMIT * (abs(power[count]) / power[count]) : power[count];   // モーターの上限値超えた場合の修正
-            power[count] = power[count] * (1 - POWER_RC) + pre_power[count] * POWER_RC;
-            pre_power[count] = power[count];
+
+            tmp_power[count][moving_average_count] = power[count];
+            power[count] = 0;
+            for (uint8_t count_1 = 0; count_1 < MOVING_AVERAGE_COUNT_NUMBER; count_1++) power[count] += tmp_power[count][count_1];
+            power[count] /= MOVING_AVERAGE_COUNT_NUMBER;
       }
+      moving_average_count++;
 
       motor_1_1 = abs(power[0]) < MIN_BRAKE ? 1 : (power[0] > 0 ? power[0] * 0.01 : 0);
       motor_1_2 = abs(power[0]) < MIN_BRAKE ? 1 : (power[0] < 0 ? power[0] * -0.01 : 0);
@@ -81,4 +88,17 @@ void motor::free() {
       motor_3_2 = 0;
       motor_4_1 = 0;
       motor_4_2 = 0;
+}
+
+int16_t motor::motor_1() {
+      return power[0];
+}
+int16_t motor::motor_2() {
+      return power[1];
+}
+int16_t motor::motor_3() {
+      return power[2];
+}
+int16_t motor::motor_4() {
+      return power[3];
 }
