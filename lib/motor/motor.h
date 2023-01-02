@@ -5,7 +5,7 @@
 
 #define PI 3.1415926535   // 円周率
 
-#define MOTOR_FREQUENCY 60000   // モーターのPWM周波数
+#define MOTOR_FREQUENCY 50000   // モーターのPWM周波数
 #define MIN_BRAKE 0   // モーターの最小値ブレーキ
 #define POWER_LIMIT 90   // モーターの最大パワー
 #define KP 1.500   // 姿勢制御比例ゲイン

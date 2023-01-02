@@ -398,7 +398,7 @@ void line_move(uint8_t* line_tf, int16_t* line_move_angle, uint8_t* line_brake) 
       if (line_brake_timer.read() < 0.05) {
             *line_brake = 1;
       } else if ((line_tf_unit[0] == 1 && pre_line != 4) || (line_tf_unit[1] == 1 && pre_line != 6) || (line_tf_unit[2] == 1 && pre_line != 0) || (line_tf_unit[3] == 1 && pre_line != 2)) {   // ライン処理から通常処理に戻る
-            if (line_timer.read() >= 0.05) {
+            if (line_timer.read() >= 0.1) {
                   if (_line.check_all() == 1 || line_timer.read() > 3 || (line_tf_unit[0] == 1 && (ball_angle < -60 || ball_angle > 60)) || (line_tf_unit[2] == 1 && (ball_angle > -90 && ball_angle < 90)) || (line_tf_unit[1] == 1 && (ball_angle > 90 || ball_angle < 0)) || (line_tf_unit[3] == 1 && (ball_angle < -90 || ball_angle > 0))) {
                         *line_tf = 0;
                         line_timer.stop();
@@ -559,6 +559,12 @@ void ui(int8_t* select, int8_t display_mode, int8_t* set_mode, int8_t* set_value
                   for (uint8_t count = 0; count <= 64; count++) oled.drawPixel(95, count, 1);
                   for (uint8_t count = 63; count <= 127; count++) oled.drawPixel(count, 32, 1);
                   for (uint16_t count = 0; count < 360; count += 10) oled.drawPixel(95 + ((110 - _ball.get_distance()) / 2.5 * cos((_ball.get_angle() - 90) * PI / 180.000)) + (3 * cos(count * PI / 180.000)), 32 + ((110 - _ball.get_distance()) / 2.5 * sin((_ball.get_angle() - 90) * PI / 180.000)) + (3 * sin(count * PI / 180.000)), 1);
+            } else if (*select == 2) {
+                  static uint16_t pre_distance[128];
+                  for (uint16_t count = 128; count > 0; count--) pre_distance[count] = pre_distance[count - 1];
+                  pre_distance[0] = _ball.get_distance();
+                  oled.printf("dis: %d\n", _ball.get_distance());
+                  for (uint16_t count = 0; count < 128; count++) oled.drawPixel(count, 65 - pre_distance[count] / 2, 1);
             } else {
                   *select = 0;
             }

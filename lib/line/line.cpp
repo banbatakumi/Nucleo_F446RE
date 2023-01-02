@@ -21,11 +21,15 @@ void line::read() {
       value[6] = left_1.read() * 1000;
       value[7] = left_2.read() * 1000;
 
+      if (moving_average_count == MOVING_AVERAGE_COUNT_NUMBER) moving_average_count = 0;
       for (uint8_t count = 0; count < 8; count++) {
-            value[count] = value[count] * (1 - RC) + pre_value[count] * RC;
-            pre_value[count] = value[count];
+            tmp_value[count][moving_average_count] = value[count];
+            value[count] = 0;
+            for (uint8_t count_1 = 0; count_1 < MOVING_AVERAGE_COUNT_NUMBER; count_1++) value[count] += tmp_value[count][count_1];
+            value[count] /= MOVING_AVERAGE_COUNT_NUMBER;
             check_tf[count] = value[count] > reaction[count] + threshold ? 1 : 0;   // 反応したかのチェック
       }
+      moving_average_count++;
 }
 
 void line::set() {
@@ -72,4 +76,8 @@ bool line::check_left() {
 
 bool line::check(uint8_t line_number) {
       return check_tf[line_number] == 1 ? 1 : 0;
+}
+
+uint16_t line::get_value(uint8_t line_number) {
+      return value[line_number];
 }

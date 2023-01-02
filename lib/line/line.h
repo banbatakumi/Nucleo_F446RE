@@ -3,8 +3,8 @@
 
 #include "mbed.h"
 
-#define RC 0.25
 #define REACTION_AVERAGE_NUMBER_OF_TIMES 10000
+#define MOVING_AVERAGE_COUNT_NUMBER 5
 
 class line {
      public:
@@ -19,6 +19,7 @@ class line {
       bool check_back();
       bool check_left();
       bool check(uint8_t line_number);
+      uint16_t get_value(uint8_t line_number);
 
       uint16_t threshold;
 
@@ -35,7 +36,8 @@ class line {
 
       bool check_tf[8];
       uint16_t value[8];
-      uint16_t pre_value[8];
+      uint16_t tmp_value[8][MOVING_AVERAGE_COUNT_NUMBER];
+      uint8_t moving_average_count;
       uint32_t reaction[8];
 };
 
