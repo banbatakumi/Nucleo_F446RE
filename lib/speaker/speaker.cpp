@@ -39,5 +39,25 @@ void speaker::startup_sound(uint8_t mode) {
             speaker_pin.period_us(350);
             wait_us(50000);
             speaker_pin = 0;
+      } else if (mode == 3) {
+            speaker_pin = SPEAKER_DUTY;
+            speaker_pin.period_us(350);
+            wait_us(50000);
+            speaker_pin = 0;
+            wait_us(150000);
+            speaker_pin = SPEAKER_DUTY;
+            speaker_pin.period_us(400);
+            wait_us(50000);
+            speaker_pin = 0;
+            wait_us(50000);
+            speaker_pin = SPEAKER_DUTY;
+            speaker_pin.period_us(350);
+            wait_us(50000);
+            speaker_pin = 0;
+            wait_us(50000);
+            speaker_pin = SPEAKER_DUTY;
+            speaker_pin.period_us(300);
+            wait_us(50000);
+            speaker_pin = 0;
       }
 }

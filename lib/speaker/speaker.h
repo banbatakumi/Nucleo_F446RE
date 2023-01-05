@@ -4,7 +4,6 @@
 #include "mbed.h"
 
 #define SPEAKER_DUTY 0.5
-
 class speaker {
      public:
       speaker(PinName speaker_pin_);
