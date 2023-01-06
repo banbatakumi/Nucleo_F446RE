@@ -20,7 +20,7 @@
 
 #define BALL_FOLLOW_RANGE 40.000   // 回り込み時にボールを追い始める角度
 
-#define CAM_RC 0.6
+#define CAM_RC 0.75
 
 #define D_PERIODO 0.01
 #define KP 2.5
@@ -70,6 +70,7 @@ Timer dt_timer;
 Timer line_brake_timer;
 Timer diffence_timer;
 Timer d_timer;
+Timer kick_timer;
 
 void imu_getc() {   // IMU情報の取得
       if (arduino_imu.getc() == 'a') {
@@ -116,7 +117,7 @@ int main() {
 
       bool pre_moving = 0;
       uint8_t ball_follow_depth = 50;
-      int16_t move_speed = 70, line_move_speed = 70;
+      int16_t move_speed = 75, line_move_speed = 75;
 
       float dt = 0;
 
@@ -184,16 +185,16 @@ int main() {
                               } else {   // ボールがある時
                                     offence_move(&ball_follow_depth, move_speed);
                               }
-                        }/*
-                        oled.clearDisplay();
-                        oled.setTextCursor(0, 0);
-                        oled.printf("1: %d\n", _motor.motor_1());
-                        oled.printf("2: %d\n", _motor.motor_2());
-                        oled.printf("3: %d\n", _motor.motor_3());
-                        oled.printf("4: %d\n", _motor.motor_4());
-                        oled.printf("4: %d\n", _motor.move_angle());
-                        oled.printf("4: %d\n", _motor.move_speed());
-                        oled.display();*/
+                        } /*
+                         oled.clearDisplay();
+                         oled.setTextCursor(0, 0);
+                         oled.printf("1: %d\n", _motor.motor_1());
+                         oled.printf("2: %d\n", _motor.motor_2());
+                         oled.printf("3: %d\n", _motor.motor_3());
+                         oled.printf("4: %d\n", _motor.motor_4());
+                         oled.printf("4: %d\n", _motor.move_angle());
+                         oled.printf("4: %d\n", _motor.move_speed());
+                         oled.display();*/
                   } else if (mode == 2) {   // モード２
                         if (_ball.get_distance() == 0) {   // ボールがない
                               _motor.run(goal_angle > 0 ? 90 : -90, abs(goal_angle) * 2);
@@ -277,7 +278,7 @@ void offence_move(uint8_t* ball_follow_depth, int16_t move_speed) {
       ball_catch_right = _ball_catch.get_right();
 
       // 方向
-      if (ball_catch_left >= 50 && ball_catch_right >= 50) {
+      if (ball_catch_left >= 55 && ball_catch_right >= 55) {
             tmp_move_angle = 0;
       } else if (abs(ball_angle) <= 15) {
             tmp_move_angle = (ball_catch_left - ball_catch_right) * 2;
@@ -289,18 +290,13 @@ void offence_move(uint8_t* ball_follow_depth, int16_t move_speed) {
       }
       if (tmp_move_angle > 180) tmp_move_angle -= 360;
       if (tmp_move_angle < -180) tmp_move_angle += 360;
-      if (goal_angle_mode != 0 && goal_angle != 0 && abs(ball_angle) < 60) {
-            robot_angle = goal_angle / 2.5 + yaw;
+
+      if (goal_angle_mode != 0 && goal_angle != 0 && abs(ball_angle) < 45) {
+            robot_angle = goal_angle / 2 + yaw;
             if (abs(robot_angle) > 45) robot_angle = 45 * (abs(robot_angle) / robot_angle);
       }
 
-      if (ball_catch_left >= 50 && ball_catch_right >= 50) {
-            tmp_move_speed = move_speed;
-      } else if (abs(ball_angle) <= BALL_FOLLOW_RANGE) {
-            tmp_move_speed = 50;
-      } else {
-            tmp_move_speed = move_speed;
-      }
+      tmp_move_speed = move_speed;
 
       _motor.run(tmp_move_angle, tmp_move_speed, robot_angle);   // 回り込み
 }
@@ -329,10 +325,8 @@ void diffence_move(int16_t move_speed) {
 
 void line_move(uint8_t* line_tf, int16_t line_move_speed, int16_t move_speed) {
       bool line_tf_x_unit[2], line_tf_y_unit[2];
-      int8_t line_unit_vector_x[8] = {0, 0, 1, 1, 0, 0, -1, -1};
-      int8_t line_unit_vector_y[8] = {1, 1, 0, 0, -1, -1, 0, 0};
       int16_t tmp_move_angle, ball_angle, ball_distance;
-      static uint8_t line_tf_x, line_tf_y;
+      static uint8_t line_tf_x, line_tf_y, ball_scoop_out;
       static int16_t line_result_vector_x, line_result_vector_y, pre_line_result_vector_x, pre_line_result_vector_y, line_back_angle;
       ball_angle = _ball.get_angle();
       ball_distance = _ball.get_distance();
@@ -345,10 +339,10 @@ void line_move(uint8_t* line_tf, int16_t line_move_speed, int16_t move_speed) {
             if (_line.check(7) && line_tf_x == 1) line_tf_x = 3;
             if (_line.check(6) == 1 && line_tf_x <= 2) line_tf_x = 2;
             if (_line.check(3) && line_tf_x == 2) line_tf_x = 4;
-            if (_line.check(0) == 1 && line_tf_y <= 2) line_tf_y = 1;
-            if (_line.check(5) && line_tf_y == 1) line_tf_y = 3;
-            if (_line.check(4) == 1 && line_tf_y <= 2) line_tf_y = 2;
-            if (_line.check(1) && line_tf_y == 2) line_tf_y = 4;
+            if (_line.check_front() == 1 && line_tf_y <= 2) line_tf_y = 1;
+            if (_line.check(1) && line_tf_y == 1) line_tf_y = 3;
+            if (_line.check_back() == 1 && line_tf_y <= 2) line_tf_y = 2;
+            if (_line.check(5) && line_tf_y == 2) line_tf_y = 4;
             if ((_line.check(0) == 1 && _line.check_back() == 1) || (_line.check(4) == 1 && _line.check_front() == 1)) line_tf_y = 0;
             if ((_line.check(2) == 1 && _line.check_left() == 1) || (_line.check(6) == 1 && _line.check_right() == 1)) line_tf_x = 0;
       }
@@ -359,34 +353,30 @@ void line_move(uint8_t* line_tf, int16_t line_move_speed, int16_t move_speed) {
       *line_tf = line_tf_x_unit[0] == 1 || line_tf_x_unit[1] == 1 || line_tf_y_unit[0] == 1 || line_tf_y_unit[1] == 1 ? 1 : 0;
 
       if (*line_tf != 0) {
-            if (_line.check_all() == 1) {
-                  line_result_vector_x = 0;
-                  line_result_vector_y = 0;
-                  for (uint8_t count = 0; count < 8; count++) {
-                        line_result_vector_x += _line.check(count) * line_unit_vector_x[count];
-                        line_result_vector_y += _line.check(count) * line_unit_vector_y[count];
-                  }
+            if (_line.check_all() == 1 && ball_scoop_out == 0) {
+                  line_result_vector_x = _line.check_right() + _line.check_left() * -1;
+                  line_result_vector_y = _line.check_front() + _line.check_back() * -1;
                   if (pre_line_result_vector_x != line_result_vector_x || pre_line_result_vector_y != line_result_vector_y) line_back_angle = atan2(line_result_vector_x, line_result_vector_y) / PI * 180.000 + 180.5;
                   pre_line_result_vector_x = line_result_vector_x;
                   pre_line_result_vector_y = line_result_vector_y;
                   if (line_back_angle > 180) line_back_angle -= 360;
 
                   if (line_tf_x_unit[0] == 1 && line_tf_y_unit[0] == 1) {
-                        tmp_move_angle = line_back_angle >= 135 || line_back_angle <= -45 ? line_back_angle : line_back_angle - 180;
+                        tmp_move_angle = line_back_angle > 135 || line_back_angle < -45 ? line_back_angle : line_back_angle - 180;
                   } else if (line_tf_x_unit[0] == 1 && line_tf_y_unit[1] == 1) {
-                        tmp_move_angle = line_back_angle >= -135 && line_back_angle <= 45 ? line_back_angle : line_back_angle - 180;
+                        tmp_move_angle = line_back_angle > -135 && line_back_angle < 45 ? line_back_angle : line_back_angle - 180;
                   } else if (line_tf_x_unit[1] == 1 && line_tf_y_unit[1] == 1) {
-                        tmp_move_angle = line_back_angle >= -45 && line_back_angle <= 135 ? line_back_angle : line_back_angle - 180;
+                        tmp_move_angle = line_back_angle > -45 && line_back_angle < 135 ? line_back_angle : line_back_angle - 180;
                   } else if (line_tf_x_unit[1] == 1 && line_tf_y_unit[0] == 1) {
-                        tmp_move_angle = line_back_angle >= 45 || line_back_angle <= -135 ? line_back_angle : line_back_angle - 180;
+                        tmp_move_angle = line_back_angle > 45 || line_back_angle < -135 ? line_back_angle : line_back_angle - 180;
                   } else if (line_tf_y_unit[0]) {
-                        tmp_move_angle = line_back_angle <= -90 || line_back_angle >= 90 ? line_back_angle : line_back_angle - 180;
+                        tmp_move_angle = line_back_angle < -90 || line_back_angle > 90 ? line_back_angle : line_back_angle - 180;
                   } else if (line_tf_y_unit[1]) {
-                        tmp_move_angle = line_back_angle >= -90 && line_back_angle <= 90 ? line_back_angle : line_back_angle - 180;
+                        tmp_move_angle = line_back_angle > -90 && line_back_angle < 90 ? line_back_angle : line_back_angle - 180;
                   } else if (line_tf_x_unit[0]) {
-                        tmp_move_angle = line_back_angle >= -180 && line_back_angle <= 0 ? line_back_angle : line_back_angle - 180;
+                        tmp_move_angle = line_back_angle > -180 && line_back_angle < 0 ? line_back_angle : line_back_angle - 180;
                   } else if (line_tf_x_unit[1]) {
-                        tmp_move_angle = line_back_angle >= 0 && line_back_angle <= 180 ? line_back_angle : line_back_angle - 180;
+                        tmp_move_angle = line_back_angle > 0 && line_back_angle < 180 ? line_back_angle : line_back_angle - 180;
                   }
                   _motor.run(tmp_move_angle, line_move_speed);
             } else {
@@ -397,10 +387,18 @@ void line_move(uint8_t* line_tf, int16_t line_move_speed, int16_t move_speed) {
                               line_tf_x = 0;
                               line_tf_y = 0;
                         }
-                        if (line_tf_x_unit[0] == 1 && line_tf_y_unit[0] == 0 && line_tf_y_unit[1] == 0 && ball_angle > 30 && ball_angle < 180) {
-                              _motor.run(abs(ball_angle) > 90 ? 180 : 0, abs(abs(ball_angle) - 90) * 2.5);
-                        } else if (line_tf_x_unit[1] == 1 && line_tf_y_unit[0] == 0 && line_tf_y_unit[1] == 0 && ball_angle < -30 && ball_angle > -180) {
-                              _motor.run(abs(ball_angle) > 90 ? 180 : 0, abs(abs(ball_angle) - 90) * 2.5);
+                        if (line_tf_x_unit[0] == 1 && line_tf_y_unit[0] == 0 && line_tf_y_unit[1] == 0 && ball_angle > 0 && ball_angle < 180) {
+                              if (ball_distance > 80) {
+                                    _motor.run(abs(ball_angle) > 90 ? 180 : 0, abs(abs(ball_angle) - 90) * 2.5);
+                              } else {
+                                    _motor.run(90, move_speed);
+                              }
+                        } else if (line_tf_x_unit[1] == 1 && line_tf_y_unit[0] == 0 && line_tf_y_unit[1] == 0 && ball_angle < 0 && ball_angle > -180) {
+                              if (ball_distance > 80) {
+                                    _motor.run(abs(ball_angle) > 90 ? 180 : 0, abs(abs(ball_angle) - 90) * 2.5);
+                              } else {
+                                    _motor.run(-90, move_speed);
+                              }
                         } else if (line_tf_y_unit[1] == 1 && line_tf_x_unit[0] == 0 && line_tf_x_unit[1] == 0 && (ball_angle < -15 || ball_angle > 15)) {
                               _motor.run(ball_angle > 0 ? 90 : -90, move_speed);
                         } else if (line_tf_y_unit[0] == 1 && line_tf_x_unit[0] == 0 && line_tf_x_unit[1] == 0 && ball_angle > -60 && ball_angle < 60) {
@@ -411,7 +409,7 @@ void line_move(uint8_t* line_tf, int16_t line_move_speed, int16_t move_speed) {
                               line_tf_x = 0;
                               line_tf_y = 0;
                         }
-                  }else{
+                  } else {
                         _motor.brake();
                   }
             }
