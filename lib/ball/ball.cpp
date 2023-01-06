@@ -34,12 +34,14 @@ void ball::read() {
             result_vector_y += value[count] * unit_vector_y[count];
       }
 
-      angle = atan2(result_vector_y, result_vector_x) / PI * 180.000 + 0.5;
-      distance = 0;
-      for (uint8_t count = 0; count < IR_NUM; count++) distance = distance < value[count] + 30 ? value[count] + 30 : distance;
-
+      angle = atan2(result_vector_y, result_vector_x) / PI * 180.500;
       angle = angle * (1 - ANGLE_RC) + pre_angle * ANGLE_RC;
       pre_angle = angle;
+
+      distance = 0;
+      for (uint8_t count = 0; count < IR_NUM; count++) {
+            if (distance < value[count] + 30) distance = value[count] + 30;
+      }
       distance = distance * (1 - DISTANCE_RC) + pre_distance * DISTANCE_RC;
       pre_distance = distance;
       if (distance > 100) distance = 100;
