@@ -4,7 +4,7 @@
 
 line::line(PinName led_pin_, PinName front_1_, PinName front_2_, PinName right_1_, PinName right_2_, PinName back_1_, PinName back_2_, PinName left_1_, PinName left_2_)
     : led_pin(led_pin_), front_1(front_1_), front_2(front_2_), right_1(right_1_), right_2(right_2_), back_1(back_1_), back_2(back_2_), left_1(left_1_), left_2(left_2_) {
-      threshold = 100;
+      threshold = 60;
 }
 
 void line::led(bool intensity) {
